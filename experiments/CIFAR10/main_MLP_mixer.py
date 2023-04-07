@@ -31,9 +31,10 @@ cfg.beta_2 = 0.999
 cfg.batch_size = 2000
 cfg.condense = True
 cfg.delta = 1e-5
-cfg.epsilon = 7.53
+cfg.epsilon = 1500000.
 cfg.hidden_size = 700
-cfg.input_clipping = 0.5
+cfg.hsv = True
+cfg.input_clipping = 0.3
 cfg.K = 0.99
 cfg.learning_rate = 1e-3
 cfg.lip_coef = 1.
@@ -152,7 +153,7 @@ def train():
   num_epochs = cfg.steps // (cfg.N // cfg.batch_size)
   cfg.noise_multiplier = compute_noise(cfg.N,cfg.batch_size,cfg.epsilon,num_epochs,cfg.delta,1e-6)
   
-  x_train,x_test,y_train,y_test,InputUpperBound = load_data_cifar(cfg.input_clipping)
+  x_train,x_test,y_train,y_test,InputUpperBound = load_data_cifar(cfg)
   model = create_model (cfg, InputUpperBound)
   model = compile_model(model,cfg)
   model.summary()
