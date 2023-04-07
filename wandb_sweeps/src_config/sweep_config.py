@@ -28,6 +28,9 @@ def get_sweep_config(cfg):
 
   elif cfg.loss == "MulticlassKR":
     parameters_loss = {}
+
+  elif cfg.loss == "MAE":
+    parameters_loss = {}
   
   elif cfg.loss == "TauCategoricalCrossentropy":
     parameters_loss = {'tau': {'max': 18.,'min': 6.,'distribution': 'log_uniform_values'},}

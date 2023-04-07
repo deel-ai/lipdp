@@ -29,7 +29,7 @@ class KCosineSimilarity(LossFunctionWrapper):
 
 # FIRST TRY : TO DEBUG
 def get_lip_constant_loss (cfg) :
-    if cfg.loss in ["MulticlassHinge","MulticlassKR","CategoricalCrossentropy"]:
+    if cfg.loss in ["MulticlassHinge","MulticlassKR","CategoricalCrossentropy","MAE"]:
         L = 1
     elif cfg.loss == "MulticlassHKR":
         L = cfg.alpha + 1
@@ -39,5 +39,4 @@ def get_lip_constant_loss (cfg) :
         L = 1/float(cfg.K * cfg.min_norm)
     else :
         raise TypeError(f"Unrecognised Loss Function Argument {cfg.loss}")
-    print("Lipschitz constant of chosen loss function is : ", L)
     return L
