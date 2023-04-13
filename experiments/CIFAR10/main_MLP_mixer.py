@@ -14,12 +14,12 @@ from tensorflow.keras.callbacks import EarlyStopping,ReduceLROnPlateau
 from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import compute_noise
 from deel.lip.losses import MulticlassHKR, MulticlassKR, MulticlassHinge, TauCategoricalCrossentropy
 from deel.lip.layers import ScaledL2NormPooling2D,ScaledAveragePooling2D
-from lipdp.src.layers import DP_SpectralConv2D,DP_SpectralDense,DP_ResidualSpectralDense
+from deel.deel.lipdp import DP_SpectralConv2D,DP_SpectralDense,DP_ResidualSpectralDense
 from deel.lip.activations import GroupSort, FullSort
 from tensorflow.keras.layers import Input, Flatten
-from lipdp.src.losses import KCosineSimilarity,get_lip_constant_loss
-from lipdp.src.pipeline import load_data_cifar
-from lipdp.src.model import DP_LipNet_Model
+from deel.deel.lipdp import KCosineSimilarity,get_lip_constant_loss
+from deel.lipdp.pipeline import load_data_cifar
+from deel.deel.lipdp import DP_LipNet_Model
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 

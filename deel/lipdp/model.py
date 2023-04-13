@@ -1,7 +1,7 @@
 import deel
 import tensorflow as tf
-from lipdp.src.layers import DPLayer
-from lipdp.src.losses import get_lip_constant_loss 
+from deel.lipdp.layers import DPLayer
+from deel.lipdp.losses import get_lip_constant_loss
 import numpy as np
 
 def global_noisify(model, trainable_vars, gradients) :

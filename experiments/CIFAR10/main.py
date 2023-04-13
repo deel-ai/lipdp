@@ -16,9 +16,9 @@ from deel.lip.losses import MulticlassHKR, MulticlassKR, MulticlassHinge, TauCat
 from deel.lip.layers import SpectralDense,SpectralConv2D,ScaledL2NormPooling2D,ScaledAveragePooling2D
 from deel.lip.activations import GroupSort, FullSort
 from tensorflow.keras.layers import Input, Flatten
-from lipdp.src.losses import KCosineSimilarity,get_lip_constant_loss
-from lipdp.src.pipeline import load_data_cifar
-from lipdp.src.model import DP_LipNet
+from deel.deel.lipdp import KCosineSimilarity,get_lip_constant_loss
+from deel.lipdp.pipeline import load_data_cifar
+from deel.deel.lipdp import DP_LipNet
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 
