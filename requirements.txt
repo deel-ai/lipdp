@@ -1,7 +1,6 @@
+numpy
 deel-lip
 matplotlib
-numpy
 pandas
 tensorflow
 tensorflow-privacy
-unittest
