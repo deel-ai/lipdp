@@ -21,89 +21,84 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
-
+from ml_collections import config_dict
+from ml_collections import config_flags
+import tensorflow as tf
+from tensorflow import keras
 import numpy as np
 import pandas as pd
-import tensorflow as tf
-import tensorflow_privacy
 import wandb
 from absl import app
 from absl import flags
-from ml_collections import config_dict
-from ml_collections import config_flags
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.callbacks import ReduceLROnPlateau
-from tensorflow.keras.layers import Flatten
-from tensorflow.keras.layers import Input
+from wandb.keras import WandbMetricsLogger, WandbCallback
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
     compute_noise,
 )
-from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
-
-import deel
-from deel.deel.lipdp import DP_LipNet_Model
-from deel.deel.lipdp import DP_ResidualSpectralDense
-from deel.deel.lipdp import DP_SpectralConv2D
-from deel.deel.lipdp import DP_SpectralDense
-from deel.deel.lipdp import get_lip_constant_loss
-from deel.deel.lipdp import KCosineSimilarity
-from deel.lip.activations import FullSort
+from deel.lip.losses import (
+    MulticlassHKR,
+    MulticlassKR,
+    MulticlassHinge,
+    TauCategoricalCrossentropy,
+)
+from deel.lipdp.layers import (
+    DP_SpectralDense,
+    DP_ResidualSpectralDense,
+    DP_LayerCentering,
+)
 from deel.lip.activations import GroupSort
-from deel.lip.layers import ScaledAveragePooling2D
-from deel.lip.layers import ScaledL2NormPooling2D
-from deel.lip.losses import MulticlassHinge
-from deel.lip.losses import MulticlassHKR
-from deel.lip.losses import MulticlassKR
-from deel.lip.losses import TauCategoricalCrossentropy
+from tensorflow.keras.layers import Input, Flatten
+from deel.lipdp.losses import KCosineSimilarity, get_lip_constant_loss
 from deel.lipdp.pipeline import load_data_cifar
+from deel.lipdp.model import DP_LipNet_Model, DP_Accountant
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
-
 
 cfg = config_dict.ConfigDict()
 
 cfg.alpha = 50.0
 cfg.beta_1 = 0.9
 cfg.beta_2 = 0.999
-cfg.batch_size = 2000
+cfg.batch_size = 256
 cfg.condense = True
 cfg.delta = 1e-5
-cfg.epsilon = 1500000.0
-cfg.hidden_size = 700
-cfg.hsv = True
-cfg.input_clipping = 0.3
+cfg.epsilon = 0.0
+cfg.hidden_size = 256
+cfg.input_clipping = 1.0
 cfg.K = 0.99
-cfg.learning_rate = 1e-3
+cfg.learning_rate = 1e-2
 cfg.lip_coef = 1.0
-cfg.loss = "MAE"
+cfg.loss = "TauCategoricalCrossentropy"
 cfg.log_wandb = "disabled"
 cfg.min_margin = 0.5
 cfg.min_norm = 5.21
-cfg.mlp_channel_dim = 256
-cfg.mlp_seq_dim = 256
+cfg.mlp_channel_dim = 512
+cfg.mlp_seq_dim = 512
 cfg.model_name = "No_name"
 cfg.noise_multiplier = 0.0
-cfg.num_mixer_layers = 5
+cfg.noisify_strategy = "global"
+cfg.num_mixer_layers = 7
 cfg.optimizer = "Adam"
 cfg.patch_size = 2
-cfg.N = 50 * 1000
+cfg.N = 50_000
 cfg.num_classes = 10
 cfg.opt_iterations = 10
+cfg.representation = "HSV"
 cfg.run_eagerly = False
 cfg.save = False
 cfg.save_folder = os.getcwd()
-cfg.steps = 2500
+cfg.steps = 3000
 cfg.sweep_id = ""
-cfg.tau = 3.0
+cfg.tau = 1.0
 cfg.tag = "Default"
 
 _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 
 
 def mlp_block_lip(x, mlp_dim):
-    y = DP_ResidualSpectralDense(mlp_dim, use_bias=False)(x)
+    y = DP_ResidualSpectralDense(units=mlp_dim, use_bias=False)(x)
     y = GroupSort(2)(y)
-    return DP_ResidualSpectralDense(x.shape[-1], use_bias=False)(y)
+    y = DP_LayerCentering()(y)
+    return DP_ResidualSpectralDense(units=x.shape[-1], use_bias=False)(y)
 
 
 def mixer_block_lip(x, tokens_mlp_dim, channels_mlp_dim):
@@ -116,7 +111,7 @@ def mixer_block_lip(x, tokens_mlp_dim, channels_mlp_dim):
     channel_mixing = mlp_block_lip(y, channels_mlp_dim)
     # ADDED
     channel_mixing = tf.keras.layers.Permute((2, 1))(channel_mixing)
-    output = tf.keras.layers.Add()([x, channel_mixing])
+    output = 0.5 * tf.keras.layers.Add()([x, channel_mixing])
     return output
 
 
@@ -144,8 +139,9 @@ def mlp_mixer_lip(
         x = mixer_block_lip(x, tokens_mlp_dim, channels_mlp_dim)
 
     # TO REPLACE ?
+    x = DP_LayerCentering()(x)
     x = tf.keras.layers.GlobalAveragePooling1D()(x)
-    return DP_SpectralDense(num_classes, use_bias=False, dtype="float32")(x)
+    return DP_SpectralDense(units=num_classes, use_bias=False, dtype="float32")(x)
 
 
 def create_model(cfg, InputUpperBound):
@@ -164,7 +160,7 @@ def create_model(cfg, InputUpperBound):
         outputs,
         X=InputUpperBound,
         cfg=cfg,
-        noisify_strategy="global",
+        noisify_strategy=cfg.noisify_strategy,
         name="mlp_mixer",
     )
 
@@ -226,11 +222,12 @@ def compile_model(model, cfg):
 
 
 def train():
+
     if cfg.log_wandb == "run":
-        wandb.init(project="dp-lipschitz", mode="online", config=cfg)
+        wandb.init(project="dp-lipschitz_CIFAR10", mode="online", config=cfg)
 
     elif cfg.log_wandb == "disabled":
-        wandb.init(project="dp-lipschitz", mode="disabled", config=cfg)
+        wandb.init(project="dp-lipschitz_CIFAR10", mode="disabled", config=cfg)
 
     elif cfg.log_wandb.startswith("sweep_"):
         wandb.init()
@@ -238,9 +235,7 @@ def train():
             cfg[key] = value
 
     num_epochs = cfg.steps // (cfg.N // cfg.batch_size)
-    cfg.noise_multiplier = compute_noise(
-        cfg.N, cfg.batch_size, cfg.epsilon, num_epochs, cfg.delta, 1e-6
-    )
+    # cfg.noise_multiplier = compute_noise(cfg.N,cfg.batch_size,cfg.epsilon,num_epochs,cfg.delta,1e-6)
 
     x_train, x_test, y_train, y_test, InputUpperBound = load_data_cifar(cfg)
     model = create_model(cfg, InputUpperBound)
@@ -253,6 +248,7 @@ def train():
         ReduceLROnPlateau(
             monitor="val_accuracy", factor=0.9, min_delta=0.0001, patience=5
         ),
+        DP_Accountant(),
     ]
     hist = model.fit(
         x_train,
@@ -287,7 +283,7 @@ def main(_):
     elif cfg.log_wandb.startswith("sweep_"):
         if cfg.sweep_id == "":
             sweep_config = get_sweep_config(cfg)
-            sweep_id = wandb.sweep(sweep=sweep_config, project="dp-lipschitz")
+            sweep_id = wandb.sweep(sweep=sweep_config, project="dp-lipschitz_CIFAR10")
         else:
             sweep_id = cfg.sweep_id
         wandb.agent(sweep_id, function=train, count=cfg.opt_iterations)

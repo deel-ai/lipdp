@@ -29,41 +29,96 @@ import deel
 
 
 class DPLayer:
-    """TODO"""
+    """
+    Wrapper for created differentially private layers, instanciates abstract methods
+    use for computing the bounds of the gradient relatively to the parameters and to the
+    input.
+    """
 
     @abstractmethod
-    def get_DP_LipCoef(self, *args, **kwargs):
+    def get_DP_LipCoef_params(self, input_bounds):
+        pass
+
+    @abstractmethod
+    def get_DP_LipCoef_inputs(self, input_bounds):
+        pass
+
+    @abstractmethod
+    def has_parameters(self):
         pass
 
 
-class DP_ResidualSpectralDense(deel.lip.layers.SpectralDense, DPLayer):
+class DP_LayerCentering(tf.keras.layers.LayerNormalization, DPLayer):
     def __init__(self, *args, **kwargs):
+        # TODO - Check that activation has a Jacobian norm of 1
+        if "scale" in kwargs and kwargs["scale"]:
+            raise ValueError("No scaling allowed.")
+        if "center" in kwargs and not kwargs["center"]:
+            print("No centering applied, layer is useless.")
+        super().__init__(*args, **kwargs)
+
+    def get_DP_LipCoef_params(self, input_bounds):
+        # LAYER IS NOT TRAINABLE RETURNS 1 * INPUT_BOUNDS
+        raise ValueError("Layer Centering doesn't have parameters")
+
+    def get_DP_LipCoef_inputs(self, input_bounds):
+        return 1 * input_bounds
+
+    def has_parameters(self):
+        return False
+
+
+class DP_ResidualSpectralDense(deel.lip.layers.SpectralDense, DPLayer):
+    def __init__(self, *args, nm_coef=1, **kwargs):
+        # TODO - Check that activation has a Jacobian norm of 1
         if "use_bias" in kwargs and kwargs["use_bias"]:
             raise ValueError("No bias allowed.")
         kwargs["use_bias"] = False
         super().__init__(*args, **kwargs)
+        self.nm_coef = nm_coef
 
-    def get_DP_LipCoef(self, *args, **kwargs):
-        return 0.5
+    def get_DP_LipCoef_params(self, input_bounds):
+        return 0.5 * input_bounds
+
+    def get_DP_LipCoef_inputs(self, input_bounds):
+        return 1 * input_bounds
+
+    def has_parameters(self):
+        return True
 
 
 class DP_SpectralDense(deel.lip.layers.SpectralDense, DPLayer):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, nm_coef=1, **kwargs):
+        # TODO - Check that activation has a Jacobian norm of 1
         if "use_bias" in kwargs and kwargs["use_bias"]:
             raise ValueError("No bias allowed.")
         kwargs["use_bias"] = False
         super().__init__(*args, **kwargs)
+        self.nm_coef = nm_coef
 
-    def get_DP_LipCoef(self, *args, **kwargs):
-        return 1
+    def get_DP_LipCoef_params(self, input_bounds):
+        return 1 * input_bounds
+
+    def get_DP_LipCoef_inputs(self, input_bounds):
+        return 1 * input_bounds
+
+    def has_parameters(self):
+        return True
 
 
-class DP_SpectralConv2D(deel.lip.layers.SpectralDense, DPLayer):
-    def __init__(self, *args, **kwargs):
+class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
+    def __init__(self, *args, nm_coef=1, **kwargs):
         if "use_bias" in kwargs and kwargs["use_bias"]:
             raise ValueError("No bias allowed.")
         kwargs["use_bias"] = False
         super().__init__(*args, **kwargs)
+        self.nm_coef = nm_coef
 
-    def get_DP_LipCoef(self, *args, **kwargs):
-        return self._get_coef() * np.sqrt(np.prod(self.kernel_size))
+    def get_DP_LipCoef_params(self, input_bounds):
+        return self._get_coef() * np.sqrt(np.prod(self.kernel_size)) * input_bounds
+
+    def get_DP_LipCoef_inputs(self, input_bounds):
+        return 1 * input_bounds
+
+    def has_parameters(self):
+        return True

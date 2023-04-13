@@ -21,63 +21,60 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
-
-import numpy as np
-import pandas as pd
-import tensorflow as tf
-import tensorflow_privacy
-import wandb
-from absl import app
-from absl import flags
 from ml_collections import config_dict
 from ml_collections import config_flags
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.callbacks import ReduceLROnPlateau
+import deel
+import tensorflow as tf
+import tensorflow_privacy
+import numpy as np
+import tensorflow as tf
+import wandb
+from absl import app
+from deel.lip.activations import GroupSort
+from deel.lip.layers import (
+    SpectralDense,
+    SpectralConv2D,
+    ScaledL2NormPooling2D,
+)
+from deel.lip.losses import (
+    MulticlassHKR,
+    MulticlassKR,
+    MulticlassHinge,
+    TauCategoricalCrossentropy,
+)
+from ml_collections import config_dict
+from ml_collections import config_flags
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.layers import Flatten
-from tensorflow.keras.layers import Input
 from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
     compute_noise,
 )
 from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 
-import deel
-from deel.deel.lipdp import DP_LipNet
-from deel.deel.lipdp import get_lip_constant_loss
-from deel.deel.lipdp import KCosineSimilarity
-from deel.lip.activations import FullSort
-from deel.lip.activations import GroupSort
-from deel.lip.layers import ScaledAveragePooling2D
-from deel.lip.layers import ScaledL2NormPooling2D
-from deel.lip.layers import SpectralConv2D
-from deel.lip.layers import SpectralDense
-from deel.lip.losses import MulticlassHinge
-from deel.lip.losses import MulticlassHKR
-from deel.lip.losses import MulticlassKR
-from deel.lip.losses import TauCategoricalCrossentropy
+from deel.lipdp.losses import KCosineSimilarity
+from deel.lipdp.model import DP_LipNet
 from deel.lipdp.pipeline import load_data_cifar
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
-
 cfg = config_dict.ConfigDict()
 
-cfg.alpha = 50.0
+cfg.alpha = 50.
 cfg.beta_1 = 0.9
 cfg.beta_2 = 0.999
 cfg.batch_size = 4096
 cfg.condense = True
 cfg.delta = 1e-5
-cfg.epsilon = 500.0
-cfg.input_clipping = 1.0
-cfg.K = 1.0
+cfg.epsilon = 500.
+cfg.input_clipping = 1.
+cfg.K = 1.
 cfg.learning_rate = 0.25
-cfg.lip_coef = 1.0
+cfg.lip_coef = 1.
 cfg.loss = "TauCategoricalCrossentropy"
 cfg.log_wandb = "disabled"
 cfg.min_margin = 0.5
-cfg.min_norm = 5.21
+cfg.min_norm = 5.21 
 cfg.model_name = "No_name"
-cfg.noise_multiplier = 0.0
+cfg.noise_multiplier=0.
 cfg.optimizer = "Adam"
 cfg.N = 50 * 1000
 cfg.num_classes = 10
@@ -86,100 +83,43 @@ cfg.save = False
 cfg.save_folder = os.getcwd()
 cfg.steps = 300
 cfg.sweep_id = ""
-cfg.tau = 8.0
+cfg.tau = 8.
 cfg.tag = "Default"
 
-_CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
-
+_CONFIG = config_flags.DEFINE_config_dict('cfg', cfg)
 
 def create_model(cfg, InputUpperBound):
-    # Using VGG architecture of Papernot et Al.
-    model = DP_LipNet(
-        [
-            SpectralConv2D(
-                filters=32,
-                kernel_size=3,
-                input_shape=(32, 32, 3),
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            SpectralConv2D(
-                filters=32,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            ScaledL2NormPooling2D(pool_size=2, strides=2),
-            SpectralConv2D(
-                filters=64,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            SpectralConv2D(
-                filters=64,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            ScaledL2NormPooling2D(pool_size=2, strides=2),
-            SpectralConv2D(
-                filters=128,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            SpectralConv2D(
-                filters=128,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            ScaledL2NormPooling2D(pool_size=2, strides=2),
-            SpectralConv2D(
-                filters=256,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            ScaledL2NormPooling2D(pool_size=4, strides=4),
-            Flatten(),
-            SpectralDense(4096, use_bias=False),
-            SpectralDense(10, use_bias=False),
-        ],
-        k_coef_lip=1.0,
-        name="hkr_model",
-        X=InputUpperBound,
-        cfg=cfg,
-    )
-    return model
+  # Using VGG architecture of Papernot et Al.
+  model = DP_LipNet(
+      [
+      SpectralConv2D(filters=32, kernel_size=3, input_shape=( 32, 32, 3), kernel_initializer="orthogonal", activation=GroupSort(2), strides=1, use_bias=False), 
+      SpectralConv2D(filters=32, kernel_size=3, kernel_initializer="orthogonal", activation=GroupSort(2), strides=1, use_bias=False), 
+      ScaledL2NormPooling2D(pool_size=2,strides=2), 
+      SpectralConv2D(filters=64, kernel_size=3, kernel_initializer="orthogonal", activation=GroupSort(2), strides=1, use_bias=False),
+      SpectralConv2D(filters=64, kernel_size=3, kernel_initializer="orthogonal", activation=GroupSort(2), strides=1, use_bias=False), 
+      ScaledL2NormPooling2D(pool_size=2,strides=2), 
+      SpectralConv2D(filters=128, kernel_size=3, kernel_initializer="orthogonal", activation=GroupSort(2), strides=1, use_bias=False),
+      SpectralConv2D(filters=128, kernel_size=3, kernel_initializer="orthogonal", activation=GroupSort(2), strides=1, use_bias=False),
+      ScaledL2NormPooling2D(pool_size=2,strides=2), 
+      SpectralConv2D(filters=256, kernel_size=3, kernel_initializer="orthogonal", activation=GroupSort(2), strides=1, use_bias=False),
+      ScaledL2NormPooling2D(pool_size=4,strides=4), 
+      Flatten(),
+      SpectralDense(4096,use_bias=False),
+      SpectralDense(10,use_bias=False),
+    ],
+      k_coef_lip=1.0,
+      name="hkr_model",
+      X = InputUpperBound,
+      cfg = cfg
+  )
+  return model
 
-
-def compile_model(model, cfg):
-    # Choice of optimizer
-    if cfg.optimizer == "SGD":
-        optimizer = tf.keras.optimizers.SGD(learning_rate=cfg.learning_rate)
-    elif cfg.optimizer == "Adam":
-        optimizer = tf.keras.optimizers.Adam(
-            learning_rate=cfg.learning_rate,
-            beta_1=cfg.beta_1,
-            beta_2=cfg.beta_2,
-            epsilon=1e-12,
-        )
+def compile_model(model,cfg):
+  # Choice of optimizer
+  if cfg.optimizer == "SGD" : 
+    optimizer = tf.keras.optimizers.SGD(learning_rate=cfg.learning_rate)
+  elif cfg.optimizer == "Adam" : 
+    optimizer = tf.keras.optimizers.Adam(learning_rate=cfg.learning_rate, beta_1=cfg.beta_1, beta_2=cfg.beta_2,epsilon=1e-12)
     else:
         print("Illegal optimizer argument : ", cfg.optimizer)
     # Choice of loss function
@@ -221,6 +161,7 @@ def compile_model(model, cfg):
 
 
 def train():
+
     if cfg.log_wandb == "run":
         wandb.init(project="dp-lipschitz", mode="online", config=cfg)
 
