@@ -21,36 +21,39 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
-from ml_collections import config_dict
-from ml_collections import config_flags
-import tensorflow as tf
-from tensorflow import keras
+
 import numpy as np
 import pandas as pd
-import wandb
+import tensorflow as tf
 from absl import app
 from absl import flags
-from wandb.keras import WandbMetricsLogger, WandbCallback
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from ml_collections import config_dict
+from ml_collections import config_flags
+from tensorflow import keras
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import ReduceLROnPlateau
+from tensorflow.keras.layers import Flatten
+from tensorflow.keras.layers import Input
 from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
     compute_noise,
 )
-from deel.lip.losses import (
-    MulticlassHKR,
-    MulticlassKR,
-    MulticlassHinge,
-    TauCategoricalCrossentropy,
-)
-from deel.lipdp.layers import (
-    DP_SpectralDense,
-    DP_ResidualSpectralDense,
-    DP_LayerCentering,
-)
+
+import wandb
 from deel.lip.activations import GroupSort
-from tensorflow.keras.layers import Input, Flatten
-from deel.lipdp.losses import KCosineSimilarity, get_lip_constant_loss
+from deel.lip.losses import MulticlassHinge
+from deel.lip.losses import MulticlassHKR
+from deel.lip.losses import MulticlassKR
+from deel.lip.losses import TauCategoricalCrossentropy
+from deel.lipdp.layers import DP_LayerCentering
+from deel.lipdp.layers import DP_ResidualSpectralDense
+from deel.lipdp.layers import DP_SpectralDense
+from deel.lipdp.losses import get_lip_constant_loss
+from deel.lipdp.losses import KCosineSimilarity
+from deel.lipdp.model import DP_Accountant
+from deel.lipdp.model import DP_LipNet_Model
 from deel.lipdp.pipeline import load_data_cifar
-from deel.lipdp.model import DP_LipNet_Model, DP_Accountant
+from wandb.keras import WandbCallback
+from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
@@ -222,7 +225,6 @@ def compile_model(model, cfg):
 
 
 def train():
-
     if cfg.log_wandb == "run":
         wandb.init(project="dp-lipschitz_CIFAR10", mode="online", config=cfg)
 
