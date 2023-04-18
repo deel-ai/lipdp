@@ -26,6 +26,8 @@ with open(path.join(path.dirname(__file__), "VERSION")) as f:
     __version__ = f.read().strip()
 
 from deel.lipdp.layers import (
+    DP_ScaledL2NormPooling2D,
+    DP_Flatten,
     DP_SpectralConv2D,
     DP_SpectralDense,
     DP_ResidualSpectralDense,

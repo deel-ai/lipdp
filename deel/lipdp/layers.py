@@ -36,16 +36,63 @@ class DPLayer:
     """
 
     @abstractmethod
-    def get_DP_LipCoef_params(self, input_bounds):
+    def backpropagate_params(self, input_bound, gradient_bound):
+        """Corresponds to the Lipschitz constant of the output wrt input."""
         pass
 
     @abstractmethod
-    def get_DP_LipCoef_inputs(self, input_bounds):
+    def backpropagate_inputs(self, input_bound):
+        """Corresponds to the Lipschitz constant of the output wrt input."""
+        pass
+
+    @abstractmethod
+    def propagate_inputs(self, input_bound):
+        """Maximum norm of output.
+
+        Remark: when the layer is linear, this coincides with its Lipschitz constant."""
         pass
 
     @abstractmethod
     def has_parameters(self):
         pass
+
+
+class DP_ScaledL2NormPooling2D(deel.lip.layers.ScaledL2NormPooling2D, DPLayer):
+    def __init__(self, *args, **kwargs):
+        # TODO - Check that activation has a Jacobian norm of 1
+        super().__init__(*args, **kwargs)
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        # LAYER IS NOT TRAINABLE RETURNS  input_bound
+        raise ValueError("Layer Centering doesn't have parameters")
+
+    def backpropagate_inputs(self, input_bound):
+        return 1
+
+    def propagate_inputs(self, input_bound):
+        return 1
+
+    def has_parameters(self):
+        return False
+
+
+class DP_Flatten(tf.keras.layers.Flatten, DPLayer):
+    def __init__(self, *args, **kwargs):
+        # TODO - Check that activation has a Jacobian norm of 1
+        super().__init__(*args, **kwargs)
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        # LAYER IS NOT TRAINABLE RETURNS  input_bound
+        raise ValueError("Layer Centering doesn't have parameters")
+
+    def backpropagate_inputs(self, input_bound):
+        return 1
+
+    def propagate_inputs(self, input_bound):
+        return 1
+
+    def has_parameters(self):
+        return False
 
 
 class DP_LayerCentering(tf.keras.layers.LayerNormalization, DPLayer):
@@ -57,12 +104,15 @@ class DP_LayerCentering(tf.keras.layers.LayerNormalization, DPLayer):
             print("No centering applied, layer is useless.")
         super().__init__(*args, **kwargs)
 
-    def get_DP_LipCoef_params(self, input_bounds):
-        # LAYER IS NOT TRAINABLE RETURNS 1 * INPUT_BOUNDS
+    def backpropagate_params(self, input_bound, gradient_bound):
+        # LAYER IS NOT TRAINABLE RETURNS  input_bound
         raise ValueError("Layer Centering doesn't have parameters")
 
-    def get_DP_LipCoef_inputs(self, input_bounds):
-        return 1 * input_bounds
+    def backpropagate_inputs(self, input_bound):
+        return 1
+
+    def propagate_inputs(self, input_bound):
+        return 1
 
     def has_parameters(self):
         return False
@@ -77,11 +127,14 @@ class DP_ResidualSpectralDense(deel.lip.layers.SpectralDense, DPLayer):
         super().__init__(*args, **kwargs)
         self.nm_coef = nm_coef
 
-    def get_DP_LipCoef_params(self, input_bounds):
-        return 0.5 * input_bounds
+    def backpropagate_params(self, input_bound, gradient_bound):
+        return 0.5 * input_bound * gradient_bound
 
-    def get_DP_LipCoef_inputs(self, input_bounds):
-        return 1 * input_bounds
+    def backpropagate_inputs(self, input_bound):
+        return 1
+
+    def propagate_inputs(self, input_bound):
+        return 1
 
     def has_parameters(self):
         return True
@@ -96,11 +149,14 @@ class DP_SpectralDense(deel.lip.layers.SpectralDense, DPLayer):
         super().__init__(*args, **kwargs)
         self.nm_coef = nm_coef
 
-    def get_DP_LipCoef_params(self, input_bounds):
-        return 1 * input_bounds
+    def backpropagate_params(self, input_bound, gradient_bound):
+        return input_bound * gradient_bound
 
-    def get_DP_LipCoef_inputs(self, input_bounds):
-        return 1 * input_bounds
+    def backpropagate_inputs(self, input_bound):
+        return 1
+
+    def propagate_inputs(self, input_bound):
+        return 1
 
     def has_parameters(self):
         return True
@@ -114,11 +170,19 @@ class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
         super().__init__(*args, **kwargs)
         self.nm_coef = nm_coef
 
-    def get_DP_LipCoef_params(self, input_bounds):
-        return self._get_coef() * np.sqrt(np.prod(self.kernel_size)) * input_bounds
+    def backpropagate_params(self, input_bound, gradient_bound):
+        return (
+            self._get_coef()
+            * np.sqrt(np.prod(self.kernel_size))
+            * input_bound
+            * gradient_bound
+        )
 
-    def get_DP_LipCoef_inputs(self, input_bounds):
-        return 1 * input_bounds
+    def backpropagate_inputs(self, input_bound):
+        return 1
+
+    def propagate_inputs(self, input_bound):
+        return 1
 
     def has_parameters(self):
         return True
