@@ -101,43 +101,34 @@ def get_eps_delta(model, niter):
 
 def compute_gradient_bounds(model):
     # Initialisation, get lipschitz constant of loss
-    dict_H, dict_K = {}, {}
-    H = model.X
-    K_loss = get_lip_constant_loss(model.cfg)
+    input_bounds, gradient_bounds = {}, {}
+    input_bound = model.X
+    gradient_bound = get_lip_constant_loss(model.cfg)
 
     # Forward pass to assess maximum activation norms
     for layer in model.layers:
         if isinstance(layer, DPLayer):
             if layer.has_parameters():
                 assert len(layer.trainable_variables) == 1
-                dict_H[layer.name] = layer.get_DP_LipCoef_inputs(H)
-                H = layer.get_DP_LipCoef_inputs(H)
-            else:
-                H = layer.get_DP_LipCoef_inputs(H)
-        # else :
-        #   print(f"WARNING : {layer.name} is not defined as a DP layer")
+                input_bounds[layer.name] = input_bound
+            input_bound = layer.propagate_inputs(input_bound)
+        else:
+            raise ValueError("TODO ERROR")
 
-    # print("dict_activation_norms", dict_H)
-
-    L_tilde = K_loss
     # Backward pass to compute gradient norm bounds and accumulate Lip constant
     for layer in model.layers[::-1]:
-        if isinstance(layer, DPLayer):
-            if layer.has_parameters():
-                assert len(layer.trainable_variables) == 1
-                dict_K[layer.trainable_variables[0].name] = layer.get_DP_LipCoef_params(
-                    L_tilde * dict_H[layer.name]
-                )
-                # print(f"For layer {layer.name} gradient norm bound is : {layer.get_DP_LipCoef_params(L_tilde * dict_H[layer.name])}")
-                # WARNING : UNCHECKED
-                L_tilde = L_tilde * layer.get_DP_LipCoef_inputs(1)
-            else:
-                # print(f"For layer {layer.name} gradient L_tilde coefficient is updated to : {L_tilde * layer.get_DP_LipCoef_inputs(1)}")
-                # WARNING : UNCHECKED
-                L_tilde = L_tilde * layer.get_DP_LipCoef_inputs(1)
+        assert isinstance(layer, DPLayer)
+        if layer.has_parameters():
+            assert len(layer.trainable_variables) == 1
+            layer_input_bound = input_bounds[layer.name]
+            var_name = layer.trainable_variables[0].name
+            gradient_bounds[var_name] = layer.backpropagate_params(
+                layer_input_bound, gradient_bound
+            )
+        gradient_bound = gradient_bound * layer.backpropagate_inputs(layer_input_bound)
 
     # Return gradient bounds
-    return dict_K
+    return gradient_bounds
 
 
 def get_noise_multiplier_coefs(model):
