@@ -23,3 +23,19 @@
 
 with open(path.join(path.dirname(__file__), "VERSION")) as f:
     __version__ = f.read().strip()
+
+from deel.lipdp.layers import (
+    DP_SpectralConv2D,
+    DP_SpectralDense,
+    DP_ResidualSpectralDense,
+    DP_LayerCentering,
+    DPLayer,
+)
+from deel.lipdp.losses import KCosineSimilarity, k_cosine_similarity
+from deel.lipdp.model import DP_LipNet, DP_LipNet_Model, DP_Accountant
+from deel.lipdp.pipeline import (
+    load_data_cifar,
+    load_data_mnist,
+    load_data_fashion_mnist,
+)
+from deel.lipdp.sensitivity import gradient_norm_check, check_layer_gradient_norm
