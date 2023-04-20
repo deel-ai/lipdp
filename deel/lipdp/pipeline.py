@@ -38,8 +38,6 @@ def load_data_cifar(cfg):
         x_train, x_test = tf.image.rgb_to_hsv(x_train), tf.image.rgb_to_hsv(x_test)
     if cfg.representation == "YIQ":
         x_train, x_test = tf.image.rgb_to_yiq(x_train), tf.image.rgb_to_yiq(x_test)
-    x_train = np.expand_dims(x_train, -1)
-    x_test = np.expand_dims(x_test, -1)
 
     # One hot labels for multiclass classifier
     y_train = to_categorical(y_train_ord)
@@ -49,7 +47,7 @@ def load_data_cifar(cfg):
     upper_bound = theoretical_upper_bound * cfg.input_clipping
     # Clip training and testing set imgs
     x_train = tf.clip_by_norm(x_train, upper_bound, axes=list(range(1, x_train.ndim)))
-    x_test = tf.clip_by_norm(x_test, upper_bound, axes=list(range(1, x_train.ndim)))
+    x_test = tf.clip_by_norm(x_test, upper_bound, axes=list(range(1, x_test.ndim)))
     return x_train, x_test, y_train, y_test, upper_bound
 
 

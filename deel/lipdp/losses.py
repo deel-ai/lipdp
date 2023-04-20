@@ -52,18 +52,26 @@ class KCosineSimilarity(LossFunctionWrapper):
 
 
 # FIRST TRY : TO DEBUG
-def get_lip_constant_loss(cfg):
+def get_lip_constant_loss(cfg, input_bound):
+    """Get the Lipschitz constant of the loss function.
+
+    Args:
+        cfg (dict): Configuration dictionary.
+        input_bound (float): Bound on the input of the loss (i.e norm of the output of the last layer).
+
+    Returns:
+        float: Lipschitz constant of the loss function.
+    """
     if cfg.loss in [
         "MulticlassHinge",
         "MulticlassKR",
-        "CategoricalCrossentropy",
         "MAE",
     ]:
         L = 1
     elif cfg.loss == "MulticlassHKR":
         L = cfg.alpha + 1
     elif cfg.loss == "TauCategoricalCrossentropy":
-        L = cfg.tau * np.sqrt(cfg.num_classes - 1) / cfg.num_classes
+        L = 2
     elif cfg.loss == "KCosineSimilarity":
         L = 1 / float(cfg.K * cfg.min_norm)
     else:

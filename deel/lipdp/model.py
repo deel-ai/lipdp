@@ -20,22 +20,24 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import math
+
 import numpy as np
 import tensorflow as tf
+import wandb
 from autodp import mechanism_zoo
 from autodp import transformer_zoo
 from autodp.autodp_core import Mechanism
 from tensorflow import keras
 
 import deel
-import wandb
 from deel.lipdp.layers import DPLayer
 from deel.lipdp.losses import get_lip_constant_loss
 
 
 class DP_Accountant(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
-        niter = (epoch + 1) * (self.model.cfg.N // self.model.cfg.batch_size)
+        niter = (epoch + 1) * math.ceil(self.model.cfg.N / self.model.cfg.batch_size)
         epsilon, delta = get_eps_delta(model=self.model, niter=niter)
         print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
         wandb.log({"epsilon": epsilon})
@@ -80,11 +82,11 @@ class Global_DPGD_Mechanism(Mechanism):
 
 def get_nm_coefs(model):
     dict_coefs = {}
-    for layer in model.layers:
-        if isinstance(layer, DPLayer):
-            if layer.has_parameters():
-                assert len(layer.trainable_variables) == 1
-                dict_coefs[layer.trainable_variables[0].name] = layer.nm_coef
+    for layer in model.layers_forward_order():
+        assert isinstance(layer, DPLayer)
+        if layer.has_parameters():
+            assert len(layer.trainable_variables) == 1
+            dict_coefs[layer.trainable_variables[0].name] = layer.nm_coef
     return dict_coefs
 
 
@@ -101,22 +103,28 @@ def get_eps_delta(model, niter):
 
 def compute_gradient_bounds(model):
     # Initialisation, get lipschitz constant of loss
-    input_bounds, gradient_bounds = {}, {}
+    input_bounds = {}
+    gradient_bounds = {}
     input_bound = model.X
-    gradient_bound = get_lip_constant_loss(model.cfg)
 
     # Forward pass to assess maximum activation norms
-    for layer in model.layers:
+    for layer in model.layers_forward_order():
         if isinstance(layer, DPLayer):
             if layer.has_parameters():
                 assert len(layer.trainable_variables) == 1
                 input_bounds[layer.name] = input_bound
+            if model.cfg.run_eagerly:
+                print(f"Layer {layer.name} input bound: {input_bound}")
             input_bound = layer.propagate_inputs(input_bound)
         else:
-            raise ValueError("TODO ERROR")
+            raise ValueError(f"Ensure that {layer.name} is a DPLayer.")
+    if model.cfg.run_eagerly:
+        print(f"Layer {layer.name} input bound: {input_bound}")
+
+    gradient_bound = get_lip_constant_loss(model.cfg, input_bound)
 
     # Backward pass to compute gradient norm bounds and accumulate Lip constant
-    for layer in model.layers[::-1]:
+    for layer in model.layers_backward_order():
         assert isinstance(layer, DPLayer)
         if layer.has_parameters():
             assert len(layer.trainable_variables) == 1
@@ -125,7 +133,7 @@ def compute_gradient_bounds(model):
             gradient_bounds[var_name] = layer.backpropagate_params(
                 layer_input_bound, gradient_bound
             )
-        gradient_bound = gradient_bound * layer.backpropagate_inputs(layer_input_bound)
+        gradient_bound = layer.backpropagate_inputs(layer_input_bound, gradient_bound)
 
     # Return gradient bounds
     return gradient_bounds
@@ -145,7 +153,6 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
     nm_coefs = get_noise_multiplier_coefs(model)
     noises = []
     for grad, var in zip(gradients, trainable_vars):
-        # PB for Layer Centering appears as var
         if var.name in gradient_bounds.keys():
             stddev = (
                 model.cfg.noise_multiplier
@@ -155,11 +162,15 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
             )
             noises.append(tf.random.normal(shape=grad.shape, stddev=stddev))
             if model.cfg.run_eagerly:
-                print(
-                    f"Adding noise of stddev : {stddev} to variable {var.name} of bound {gradient_bounds[var.name]} and effective value {tf.norm(grad)}"
+                noise_msg = (
+                    f"Adding noise of stddev : {stddev}"
+                    f" to variable {var.name}"
+                    f" of sensivity {gradient_bounds[var.name]}"
+                    f" and effective norm {tf.norm(grad)}"
                 )
+                print(noise_msg)
         else:
-            noises.append(tf.zeros(shape=grad.shape))
+            raise ValueError(f"Variable {var.name} not in gradient bounds.")
 
     noisy_grads = [g + n for g, n in zip(gradients, noises)]
     return noisy_grads
@@ -167,8 +178,18 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
 
 def global_noisify(model, gradient_bounds, trainable_vars, gradients):
     global_bound = np.sqrt(sum([bound**2 for bound in gradient_bounds.values()]))
-    stddev = model.cfg.noise_multiplier * global_bound / model.cfg.batch_size
+    global_sensivity = global_bound / model.cfg.batch_size
+    stddev = model.cfg.noise_multiplier * global_sensivity
     noises = [tf.random.normal(shape=g.shape, stddev=stddev) for g in gradients]
+    if model.cfg.run_eagerly:
+        for grad, var in zip(gradients, trainable_vars):
+            noise_msg = (
+                f"Adding noise of stddev : {stddev}"
+                f" to variable {var.name}"
+                f" of sensivity {global_sensivity}"
+                f" and effective norm {tf.norm(grad)}"
+            )
+            print(noise_msg)
     noisy_grads = [g + n for g, n in zip(gradients, noises)]
     return noisy_grads
 
@@ -202,6 +223,12 @@ class DP_LipNet(deel.lip.model.Sequential):
                 "Incorrect noisify_strategy argument during model initialisation."
             )
 
+    def layers_forward_order(self):
+        return self.layers
+
+    def layers_backward_order(self):
+        return self.layers[::-1]
+
     # Define the differentially private training step
     def train_step(self, data):
         # Unpack data
@@ -233,7 +260,7 @@ class DP_LipNet(deel.lip.model.Sequential):
         return {m.name: m.result() for m in self.metrics}
 
 
-class DP_LipNet_Model(deel.lip.model.Model):
+class DP_Sequential(deel.lip.model.Model):
     """ "Model Class based on the DEEL Sequential model. Takes into account the architecture, only the following components are allowed :
     - Input
     - SpectralDense
@@ -249,8 +276,9 @@ class DP_LipNet_Model(deel.lip.model.Model):
     Hypothesis: The model is 1-Lipschitz and Dense layers are Gradient Norm Preserving.
     """
 
-    def __init__(self, *args, X, noisify_strategy, cfg, **kwargs):
+    def __init__(self, dp_layers, *args, X, noisify_strategy, cfg, **kwargs):
         super().__init__(*args, **kwargs)
+        self.dp_layers = dp_layers
         self.X = X
         self.cfg = cfg
         if noisify_strategy == "global":
@@ -261,6 +289,18 @@ class DP_LipNet_Model(deel.lip.model.Model):
             raise TypeError(
                 "Incorrect noisify_strategy argument during model initialisation."
             )
+
+    def layers_forward_order(self):
+        return self.dp_layers
+
+    def layers_backward_order(self):
+        return self.dp_layers[::-1]
+
+    def call(self, inputs, *args, **kwarsg):
+        x = inputs
+        for layer in self.layers_forward_order():
+            x = layer(x, *args, **kwarsg)
+        return x
 
     # Define the differentially private training step
     def train_step(self, data):
