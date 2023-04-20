@@ -42,8 +42,8 @@ def get_sweep_config(cfg):
             "min": 0.2,
             "distribution": "log_uniform_values",
         },
-        "batch_size": {"values": [2000, 6000, 25000], "distribution": "categorical"},
-        "steps": {"values": [300, 500, 800], "distribution": "categorical"},
+        "batch_size": {"values": [2048], "distribution": "categorical"},
+        "steps": {"values": [1000], "distribution": "categorical"},
     }
 
     learning_rate_SGD = {

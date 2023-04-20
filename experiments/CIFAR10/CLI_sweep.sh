@@ -1,13 +1,9 @@
-for epsilon in 7.53 3.0 :
+for noise in 3.2 3.5 4. 5.:
 do 
-    python main.py --cfg.log_wandb="sweep_losses" --cfg.epsilon=$epsilon --cfg.loss="TauCategoricalCrossentropy" --cfg.opt_iterations=25 --cfg.optimizer="Adam"
-    python main.py --cfg.log_wandb="sweep_losses" --cfg.epsilon=$epsilon --cfg.loss="TauCategoricalCrossentropy" --cfg.opt_iterations=25 --cfg.optimizer="SGD"
-    python main.py --cfg.log_wandb="sweep_losses" --cfg.epsilon=$epsilon --cfg.loss="KCosineSimilarity" --cfg.opt_iterations=25 --cfg.optimizer="Adam"
-    python main.py --cfg.log_wandb="sweep_losses" --cfg.epsilon=$epsilon --cfg.loss="KCosineSimilarity" --cfg.opt_iterations=25 --cfg.optimizer="SGD"
-    python main.py --cfg.log_wandb="sweep_losses" --cfg.epsilon=$epsilon --cfg.loss="MulticlassHinge" --cfg.opt_iterations=25 --cfg.optimizer="Adam"
-    python main.py --cfg.log_wandb="sweep_losses" --cfg.epsilon=$epsilon --cfg.loss="MulticlassHinge" --cfg.opt_iterations=25 --cfg.optimizer="SGD"
-    python main.py --cfg.log_wandb="sweep_losses" --cfg.epsilon=$epsilon --cfg.loss="MulticlassKR" --cfg.opt_iterations=25 --cfg.optimizer="Adam"
-    python main.py --cfg.log_wandb="sweep_losses" --cfg.epsilon=$epsilon --cfg.loss="MulticlassKR" --cfg.opt_iterations=25 --cfg.optimizer="SGD"
-    python main.py --cfg.log_wandb="sweep_losses" --cfg.epsilon=$epsilon --cfg.loss="MulticlassHKR" --cfg.opt_iterations=25 --cfg.optimizer="SGD"
-    python main.py --cfg.log_wandb="sweep_losses" --cfg.epsilon=$epsilon --cfg.loss="MulticlassHKR" --cfg.opt_iterations=25 --cfg.optimizer="Adam"
+    python main_Architectures.py --cfg.log_wandb="sweep_archi" --cfg.noise_multiplier=$noise --cfg.loss="TauCategoricalCrossentropy" --cfg.opt_iterations=10  --cfg.architecture="ConvNet"
+    python main_Architectures.py --cfg.log_wandb="sweep_archi" --cfg.noise_multiplier=$noise --cfg.loss="KCosineSimilarity" --cfg.opt_iterations=10  --cfg.architecture="ConvNet"
+    python main_Architectures.py --cfg.log_wandb="sweep_archi" --cfg.noise_multiplier=$noise --cfg.loss="MulticlassHinge" --cfg.opt_iterations=10  --cfg.architecture="ConvNet"
+    python main_Architectures.py --cfg.log_wandb="sweep_archi" --cfg.noise_multiplier=$noise --cfg.loss="MulticlassKR" --cfg.opt_iterations=10 --cfg.architecture="ConvNet"
+    python main_Architectures.py --cfg.log_wandb="sweep_archi" --cfg.noise_multiplier=$noise --cfg.loss="MulticlassHKR" --cfg.opt_iterations=10  --cfg.architecture="ConvNet"
+    python main_Architectures.py --cfg.log_wandb="sweep_archi" --cfg.noise_multiplier=$noise --cfg.loss="MAE" --cfg.opt_iterations=10  --cfg.architecture="ConvNet"
 done
