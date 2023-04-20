@@ -37,19 +37,37 @@ class DPLayer:
 
     @abstractmethod
     def backpropagate_params(self, input_bound, gradient_bound):
-        """Corresponds to the Lipschitz constant of the output wrt input."""
+        """Corresponds to the Lipschitz constant of the output wrt the parameters,
+            i.e. the norm of the Jacobian of the output wrt the parameters times the norm of the cotangeant vector.
+
+        Args:
+            input_bound: Maximum norm of input.
+            gradient_bound: Maximum norm of gradients (co-tangent vector)
+
+        Returns:
+            Maximum norm of tangent vector."""
         pass
 
     @abstractmethod
-    def backpropagate_inputs(self, input_bound):
-        """Corresponds to the Lipschitz constant of the output wrt input."""
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        """Applies the dilatation of the cotangeant vector norm (upstream gradient) by the Jacobian,
+            i.e. multiply by the Lipschitz constant of the output wrt input.
+
+        Args:
+            input_bound: Maximum norm of input.
+            gradient_bound: Maximum norm of gradients (co-tangent vector)
+
+        Returns:
+            Maximum norm of tangent vector.
+        """
         pass
 
     @abstractmethod
     def propagate_inputs(self, input_bound):
         """Maximum norm of output.
 
-        Remark: when the layer is linear, this coincides with its Lipschitz constant."""
+        Remark: when the layer is linear, this coincides with its Lipschitz constant * input_bound.
+        """
         pass
 
     @abstractmethod
@@ -57,39 +75,59 @@ class DPLayer:
         pass
 
 
+def DP_GNP_Factory(layer_cls):
+    """Factory for creating differentially private gradient norm preserving layers that don't have parameters.
+
+    Remark: the layer is assumed to be GNP.
+    This means that the gradient norm is preserved by the layer (i.e its Jacobian norm is 1).
+    Pllease ensure that the layer is GNP before using this factory.
+
+    Args:
+        layer_cls: Class of the layer to wrap.
+
+    Returns:
+        A differentially private layer that doesn't have parameters.
+    """
+
+    class DP_GNP(layer_cls, DPLayer):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+        def backpropagate_params(self, input_bound, gradient_bound):
+            raise ValueError("Layer doesn't have parameters")
+
+        def backpropagate_inputs(self, input_bound, gradient_bound):
+            return 1 * gradient_bound
+
+        def propagate_inputs(self, input_bound):
+            return input_bound
+
+        def has_parameters(self):
+            return False
+
+    return DP_GNP
+
+
+DP_Reshape = DP_GNP_Factory(tf.keras.layers.Reshape)
+DP_Lambda = DP_GNP_Factory(tf.keras.layers.Lambda)
+DP_Permute = DP_GNP_Factory(tf.keras.layers.Permute)
+DP_Flatten = DP_GNP_Factory(tf.keras.layers.Flatten)
+DP_GroupSort = DP_GNP_Factory(deel.lip.activations.GroupSort)
+DP_InputLayer = DP_GNP_Factory(tf.keras.layers.InputLayer)
+
+
 class DP_ScaledL2NormPooling2D(deel.lip.layers.ScaledL2NormPooling2D, DPLayer):
     def __init__(self, *args, **kwargs):
-        # TODO - Check that activation has a Jacobian norm of 1
         super().__init__(*args, **kwargs)
 
     def backpropagate_params(self, input_bound, gradient_bound):
-        # LAYER IS NOT TRAINABLE RETURNS  input_bound
-        raise ValueError("Layer Centering doesn't have parameters")
+        raise ValueError("ScaledL2NormPooling2D doesn't have parameters")
 
-    def backpropagate_inputs(self, input_bound):
-        return 1
-
-    def propagate_inputs(self, input_bound):
-        return 1
-
-    def has_parameters(self):
-        return False
-
-
-class DP_Flatten(tf.keras.layers.Flatten, DPLayer):
-    def __init__(self, *args, **kwargs):
-        # TODO - Check that activation has a Jacobian norm of 1
-        super().__init__(*args, **kwargs)
-
-    def backpropagate_params(self, input_bound, gradient_bound):
-        # LAYER IS NOT TRAINABLE RETURNS  input_bound
-        raise ValueError("Layer Centering doesn't have parameters")
-
-    def backpropagate_inputs(self, input_bound):
-        return 1
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
 
     def propagate_inputs(self, input_bound):
-        return 1
+        return input_bound
 
     def has_parameters(self):
         return False
@@ -97,7 +135,6 @@ class DP_Flatten(tf.keras.layers.Flatten, DPLayer):
 
 class DP_LayerCentering(tf.keras.layers.LayerNormalization, DPLayer):
     def __init__(self, *args, **kwargs):
-        # TODO - Check that activation has a Jacobian norm of 1
         if "scale" in kwargs and kwargs["scale"]:
             raise ValueError("No scaling allowed.")
         if "center" in kwargs and not kwargs["center"]:
@@ -105,44 +142,20 @@ class DP_LayerCentering(tf.keras.layers.LayerNormalization, DPLayer):
         super().__init__(*args, **kwargs)
 
     def backpropagate_params(self, input_bound, gradient_bound):
-        # LAYER IS NOT TRAINABLE RETURNS  input_bound
         raise ValueError("Layer Centering doesn't have parameters")
 
-    def backpropagate_inputs(self, input_bound):
-        return 1
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
 
     def propagate_inputs(self, input_bound):
-        return 1
+        return input_bound
 
     def has_parameters(self):
         return False
 
 
-class DP_ResidualSpectralDense(deel.lip.layers.SpectralDense, DPLayer):
-    def __init__(self, *args, nm_coef=1, **kwargs):
-        # TODO - Check that activation has a Jacobian norm of 1
-        if "use_bias" in kwargs and kwargs["use_bias"]:
-            raise ValueError("No bias allowed.")
-        kwargs["use_bias"] = False
-        super().__init__(*args, **kwargs)
-        self.nm_coef = nm_coef
-
-    def backpropagate_params(self, input_bound, gradient_bound):
-        return 0.5 * input_bound * gradient_bound
-
-    def backpropagate_inputs(self, input_bound):
-        return 1
-
-    def propagate_inputs(self, input_bound):
-        return 1
-
-    def has_parameters(self):
-        return True
-
-
 class DP_SpectralDense(deel.lip.layers.SpectralDense, DPLayer):
     def __init__(self, *args, nm_coef=1, **kwargs):
-        # TODO - Check that activation has a Jacobian norm of 1
         if "use_bias" in kwargs and kwargs["use_bias"]:
             raise ValueError("No bias allowed.")
         kwargs["use_bias"] = False
@@ -152,11 +165,11 @@ class DP_SpectralDense(deel.lip.layers.SpectralDense, DPLayer):
     def backpropagate_params(self, input_bound, gradient_bound):
         return input_bound * gradient_bound
 
-    def backpropagate_inputs(self, input_bound):
-        return 1
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
 
     def propagate_inputs(self, input_bound):
-        return 1
+        return input_bound
 
     def has_parameters(self):
         return True
@@ -178,11 +191,142 @@ class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
             * gradient_bound
         )
 
-    def backpropagate_inputs(self, input_bound):
-        return 1
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
 
     def propagate_inputs(self, input_bound):
-        return 1
+        return input_bound
 
     def has_parameters(self):
         return True
+
+
+class DP_SplitResidual(tf.keras.layers.Layer, DPLayer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def call(self, inputs, *args, **kwds):
+        return (inputs, inputs)
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        raise ValueError("Layer doesn't have parameters")
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        assert len(gradient_bound) == 2
+        g1, g2 = gradient_bound
+        return g1 + g2
+
+    def propagate_inputs(self, input_bound):
+        return (input_bound, input_bound)
+
+    def has_parameters(self):
+        return False
+
+
+class DP_MergeResidual(tf.keras.layers.Layer, DPLayer):
+    def __init__(self, merge_policy, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert merge_policy in ["add", "1-lip-add"]
+        self.merge_policy = merge_policy
+
+    def call(self, inputs, *args, **kwds):
+        assert len(inputs) == 2
+        i1, i2 = inputs
+        if self.merge_policy == "add":
+            return i1 + i2
+        elif self.merge_policy == "1-lip-add":
+            return 0.5 * (i1 + i2)
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        raise ValueError("Layer doesn't have parameters")
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        if self.merge_policy == "add":
+            return gradient_bound, gradient_bound
+        elif self.merge_policy == "1-lip-add":
+            return 0.5 * gradient_bound, 0.5 * gradient_bound
+
+    def propagate_inputs(self, input_bound):
+        assert len(input_bound) == 2
+        i1, i2 = input_bound
+        if self.merge_policy == "add":
+            return i1 + i2
+        elif self.merge_policy == "1-lip-add":
+            return 0.5 * (i1 + i2)
+
+    def has_parameters(self):
+        return False
+
+
+class DP_WrappedResidual(tf.keras.layers.Layer, DPLayer):
+    def __init__(self, block, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.block = block
+
+    def call(self, inputs, *args, **kwargs):
+        assert len(inputs) == 2
+        i1, i2 = inputs
+        i2 = self.block(i2, *args, **kwargs)
+        return i1, i2
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        assert len(input_bound) == 2
+        assert len(gradient_bound) == 2
+        _, i2 = input_bound
+        _, g2 = gradient_bound
+        g2 = self.block.backpropagate_params(i2, g2)
+        return g2
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        assert len(input_bound) == 2
+        assert len(gradient_bound) == 2
+        _, i2 = input_bound
+        g1, g2 = gradient_bound
+        g2 = self.block.backpropagate_inputs(i2, g2)
+        return g1, g2
+
+    def propagate_inputs(self, input_bound):
+        assert len(input_bound) == 2
+        i1, i2 = input_bound
+        i2 = self.block.propagate_inputs(i2)
+        return i1, i2
+
+    def has_parameters(self):
+        return self.block.has_parameters()
+
+    @property
+    def nm_coef(self):
+        """Returns the norm multiplier coefficient of the layer.
+
+        Remark: this is a property to mimic the behavior of an attribute.
+        """
+        return self.block.nm_coef
+
+
+class LazyBuild:
+    """Lazy initialization design pattern.
+
+    This class is used to delay the initialization of a layer until the
+    build method is called.
+    """
+
+    def __init__(self, layer_cls, *args, **kwargs):
+        self.layer_cls = layer_cls
+        self.args = args
+        self.kwargs = kwargs
+
+    def build(self):
+        return self.layer_cls(*self.args, **self.kwargs)
+
+
+def make_residuals(merge_policy, lazy_builders):
+    layers = [DP_SplitResidual()]
+
+    for lazy_builder in lazy_builders:
+        block = lazy_builder.build()
+        residual_block = DP_WrappedResidual(block)
+        layers.append(residual_block)
+
+    layers.append(DP_MergeResidual(merge_policy))
+
+    return layers

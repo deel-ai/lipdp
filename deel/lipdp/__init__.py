@@ -30,12 +30,20 @@ from deel.lipdp.layers import (
     DP_Flatten,
     DP_SpectralConv2D,
     DP_SpectralDense,
-    DP_ResidualSpectralDense,
+    DP_Reshape,
+    DP_Lambda,
+    DP_Permute,
+    DP_Reshape,
+    DP_GroupSort,
+    DP_InputLayer,
+    DP_Flatten,
     DP_LayerCentering,
     DPLayer,
+    make_residuals,
+    LazyBuild,
 )
 from deel.lipdp.losses import KCosineSimilarity, k_cosine_similarity
-from deel.lipdp.model import DP_LipNet, DP_LipNet_Model, DP_Accountant
+from deel.lipdp.model import DP_LipNet, DP_Sequential, DP_Accountant
 from deel.lipdp.pipeline import (
     load_data_cifar,
     load_data_mnist,

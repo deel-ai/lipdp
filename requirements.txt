@@ -1,7 +1,8 @@
+scipy<=1.9.3
 autodp
 numpy
 deel-lip
 matplotlib
 pandas
-tensorflow < 2.12.0
+tensorflow
 tensorflow-privacy

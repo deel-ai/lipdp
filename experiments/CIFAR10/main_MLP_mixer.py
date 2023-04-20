@@ -20,11 +20,13 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import math
 import os
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import wandb
 from absl import app
 from absl import flags
 from ml_collections import config_dict
@@ -37,23 +39,29 @@ from tensorflow.keras.layers import Input
 from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
     compute_noise,
 )
+from wandb.keras import WandbCallback
+from wandb.keras import WandbMetricsLogger
 
-import wandb
 from deel.lip.activations import GroupSort
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
 from deel.lip.losses import MulticlassKR
 from deel.lip.losses import TauCategoricalCrossentropy
+from deel.lipdp.layers import DP_Flatten
+from deel.lipdp.layers import DP_GroupSort
+from deel.lipdp.layers import DP_InputLayer
+from deel.lipdp.layers import DP_Lambda
 from deel.lipdp.layers import DP_LayerCentering
-from deel.lipdp.layers import DP_ResidualSpectralDense
+from deel.lipdp.layers import DP_Permute
+from deel.lipdp.layers import DP_Reshape
 from deel.lipdp.layers import DP_SpectralDense
+from deel.lipdp.layers import LazyBuild
+from deel.lipdp.layers import make_residuals
 from deel.lipdp.losses import get_lip_constant_loss
 from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
-from deel.lipdp.model import DP_LipNet_Model
+from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_cifar
-from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
@@ -61,27 +69,26 @@ cfg = config_dict.ConfigDict()
 cfg.alpha = 50.0
 cfg.beta_1 = 0.9
 cfg.beta_2 = 0.999
-cfg.batch_size = 256
+cfg.batch_size = 500
 cfg.condense = True
 cfg.delta = 1e-5
 cfg.epsilon = 0.0
-cfg.hidden_size = 256
-cfg.input_clipping = 1.0
+cfg.hidden_size = 64
+cfg.input_clipping = 0.5
 cfg.K = 0.99
-cfg.learning_rate = 1e-2
+cfg.learning_rate = 1e-3
 cfg.lip_coef = 1.0
-cfg.loss = "TauCategoricalCrossentropy"
 cfg.log_wandb = "disabled"
 cfg.min_margin = 0.5
 cfg.min_norm = 5.21
-cfg.mlp_channel_dim = 512
-cfg.mlp_seq_dim = 512
+cfg.mlp_channel_dim = 64
+cfg.mlp_seq_dim = 64
 cfg.model_name = "No_name"
-cfg.noise_multiplier = 0.0
+cfg.noise_multiplier = 1.2
 cfg.noisify_strategy = "global"
-cfg.num_mixer_layers = 7
+cfg.num_mixer_layers = 1
 cfg.optimizer = "Adam"
-cfg.patch_size = 2
+cfg.patch_size = 4
 cfg.N = 50_000
 cfg.num_classes = 10
 cfg.opt_iterations = 10
@@ -89,83 +96,83 @@ cfg.representation = "HSV"
 cfg.run_eagerly = False
 cfg.save = False
 cfg.save_folder = os.getcwd()
-cfg.steps = 3000
+cfg.steps = math.ceil(cfg.N / cfg.batch_size) * 10
+cfg.skip_connections = True
 cfg.sweep_id = ""
-cfg.tau = 1.0
+cfg.tau = 8.0
 cfg.tag = "Default"
+cfg.loss = "TauCategoricalCrossentropy"
+
 
 _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 
 
-def mlp_block_lip(x, mlp_dim):
-    y = DP_ResidualSpectralDense(units=mlp_dim, use_bias=False)(x)
-    y = GroupSort(2)(y)
-    y = DP_LayerCentering()(y)
-    return DP_ResidualSpectralDense(units=x.shape[-1], use_bias=False)(y)
+def create_model(cfg, InputUpperBound, input_shape=(32, 32, 3), num_classes=10):
+    layers = [DP_InputLayer(input_shape=input_shape)]
 
-
-def mixer_block_lip(x, tokens_mlp_dim, channels_mlp_dim):
-    y = tf.keras.layers.Permute((2, 1))(x)
-
-    token_mixing = mlp_block_lip(y, tokens_mlp_dim)
-    token_mixing = tf.keras.layers.Permute((2, 1))(token_mixing)
-    x = 0.5 * tf.keras.layers.Add()([x, token_mixing])
-
-    channel_mixing = mlp_block_lip(y, channels_mlp_dim)
-    # ADDED
-    channel_mixing = tf.keras.layers.Permute((2, 1))(channel_mixing)
-    output = 0.5 * tf.keras.layers.Add()([x, channel_mixing])
-    return output
-
-
-def mlp_mixer_lip(
-    x,
-    loss,
-    num_blocks,
-    patch_size,
-    hidden_dim,
-    tokens_mlp_dim,
-    channels_mlp_dim,
-    num_classes=10,
-):
-    x = tf.image.extract_patches(
-        images=x,
-        sizes=[1, patch_size, patch_size, 1],
-        strides=[1, patch_size, patch_size, 1],
-        rates=[1, 1, 1, 1],
-        padding="VALID",
+    layers.append(
+        DP_Lambda(
+            tf.image.extract_patches,
+            arguments=dict(
+                sizes=[1, cfg.patch_size, cfg.patch_size, 1],
+                strides=[1, cfg.patch_size, cfg.patch_size, 1],
+                rates=[1, 1, 1, 1],
+                padding="VALID",
+            ),
+        )
     )
-    # x = DP_SpectralConv2D(filters=hidden_dim, kernel_size=patch_size, use_bias=False, strides=patch_size, padding="same")(x)
-    x = tf.keras.layers.Reshape((x.shape[1] * x.shape[2], x.shape[3]))(x)
 
-    for _ in range(num_blocks):
-        x = mixer_block_lip(x, tokens_mlp_dim, channels_mlp_dim)
+    # layers.append(DP_SpectralConv2D(filters=hidden_dim, kernel_size=patch_size, use_bias=False, strides=patch_size, padding="same"))
+    seq_len = (input_shape[0] // cfg.patch_size) * (input_shape[1] // cfg.patch_size)
+
+    layers.append(DP_Reshape((seq_len, (cfg.patch_size**2) * input_shape[-1])))
+    layers.append(DP_SpectralDense(units=cfg.hidden_size, use_bias=False))
+
+    for _ in range(cfg.num_mixer_layers):
+        lazy_builders = [
+            # token mixing
+            # TODO: add LayerNorm ?
+            LazyBuild(DP_Permute, (2, 1)),
+            LazyBuild(DP_SpectralDense, units=cfg.mlp_seq_dim, use_bias=False),
+            LazyBuild(DP_GroupSort, 2),
+            LazyBuild(DP_SpectralDense, units=seq_len, use_bias=False),
+            LazyBuild(DP_Permute, (2, 1)),
+        ]
+
+        if cfg.skip_connections:
+            layers += make_residuals("1-lip-add", lazy_builders)
+        else:
+            layers += [lazy_builder.build() for lazy_builder in lazy_builders]
+
+        lazy_builders = [
+            # channel mixing
+            # TODO: add LayerNorm ?
+            LazyBuild(DP_SpectralDense, units=cfg.mlp_channel_dim, use_bias=False),
+            LazyBuild(DP_GroupSort, 2),
+            LazyBuild(DP_SpectralDense, units=cfg.hidden_size, use_bias=False),
+        ]
+
+        if cfg.skip_connections:
+            layers += make_residuals("1-lip-add", lazy_builders)
+        else:
+            layers += [lazy_builder.build() for lazy_builder in lazy_builders]
 
     # TO REPLACE ?
-    x = DP_LayerCentering()(x)
-    x = tf.keras.layers.GlobalAveragePooling1D()(x)
-    return DP_SpectralDense(units=num_classes, use_bias=False, dtype="float32")(x)
+    # layers.append(DP_LayerCentering())
+    layers.append(DP_Flatten())
+    layers.append(DP_SpectralDense(units=num_classes, use_bias=False))
 
-
-def create_model(cfg, InputUpperBound):
-    inputs = tf.keras.layers.Input(shape=(32, 32, 3))
-    outputs = mlp_mixer_lip(
-        inputs,
-        cfg.loss,
-        cfg.num_mixer_layers,
-        cfg.patch_size,
-        cfg.hidden_size,
-        cfg.mlp_seq_dim,
-        cfg.mlp_channel_dim,
-    )
-    return DP_LipNet_Model(
-        inputs,
-        outputs,
+    model = DP_Sequential(
+        layers,
         X=InputUpperBound,
         cfg=cfg,
         noisify_strategy=cfg.noisify_strategy,
         name="mlp_mixer",
     )
+
+    model.build(input_shape=(None, *input_shape))
+
+    return model
 
 
 def compile_model(model, cfg):
@@ -224,7 +231,7 @@ def compile_model(model, cfg):
     return model
 
 
-def train():
+def init_wandb():
     if cfg.log_wandb == "run":
         wandb.init(project="dp-lipschitz_CIFAR10", mode="online", config=cfg)
 
@@ -236,14 +243,17 @@ def train():
         for key, value in wandb.config.items():
             cfg[key] = value
 
-    num_epochs = cfg.steps // (cfg.N // cfg.batch_size)
+
+def train():
+    init_wandb()
+
+    num_epochs = math.ceil(cfg.steps / math.ceil(cfg.N / cfg.batch_size))
     # cfg.noise_multiplier = compute_noise(cfg.N,cfg.batch_size,cfg.epsilon,num_epochs,cfg.delta,1e-6)
 
     x_train, x_test, y_train, y_test, InputUpperBound = load_data_cifar(cfg)
     model = create_model(cfg, InputUpperBound)
     model = compile_model(model, cfg)
     model.summary()
-    num_epochs = cfg.steps // (cfg.N // cfg.batch_size)
     callbacks = [
         WandbCallback(monitor="val_accuracy"),
         EarlyStopping(monitor="val_accuracy", min_delta=0.001, patience=15),
