@@ -26,7 +26,6 @@ import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import wandb
 from absl import app
 from absl import flags
 from ml_collections import config_dict
@@ -39,9 +38,8 @@ from tensorflow.keras.layers import Input
 from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
     compute_noise,
 )
-from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 
+import wandb
 from deel.lip.activations import GroupSort
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
@@ -62,6 +60,8 @@ from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_cifar
+from wandb.keras import WandbCallback
+from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
