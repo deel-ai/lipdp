@@ -133,8 +133,46 @@ class DP_ScaledL2NormPooling2D(deel.lip.layers.ScaledL2NormPooling2D, DPLayer):
         return False
 
 
-class DP_LayerCentering(tf.keras.layers.LayerNormalization, DPLayer):
+class LayerCentering(Layer):
+    def __init__(self, pixelwise=False, channelwise=True, **kwargs):
+        self.pixelwise = pixelwise
+        self.channelwise = channelwise
+        self.axes = None
+        super().__init__(**kwargs)
+
+    def build(self, input_shape):
+        if len(input_shape) == 4:
+            if self.channelwise and self.pixelwise:
+                raise RuntimeError(
+                    "enabling channelwise and pixelwise in LayerCentering "
+                    "would average over a single value"
+                )
+            elif self.channelwise:
+                self.axes = [-1]
+            elif self.pixelwise:
+                self.axes = [1, 2]
+            else:
+                self.axes = [1, 2, 3]
+        else:
+            self.axes = range(len(input_shape) - 1)
+
+    @tf.function
+    def call(self, inputs, training=True, **kwargs):
+        current_means = tf.reduce_mean(inputs, axis=self.axes, keepdims=True)
+        return inputs - current_means
+
+    def get_config(self):
+        config = {
+            "pixelwise": self.pixelwise,
+            "channelwise": self.channelwise,
+        }
+        base_config = super().get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
+class DP_LayerCentering(LayerCentering, DPLayer):
     def __init__(self, *args, **kwargs):
+        # TODO - Check that activation has a Jacobian norm of 1
         if "scale" in kwargs and kwargs["scale"]:
             raise ValueError("No scaling allowed.")
         if "center" in kwargs and not kwargs["center"]:
@@ -142,6 +180,7 @@ class DP_LayerCentering(tf.keras.layers.LayerNormalization, DPLayer):
         super().__init__(*args, **kwargs)
 
     def backpropagate_params(self, input_bound, gradient_bound):
+        # LAYER IS NOT TRAINABLE RETURNS  input_bound
         raise ValueError("Layer Centering doesn't have parameters")
 
     def backpropagate_inputs(self, input_bound, gradient_bound):

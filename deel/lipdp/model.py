@@ -24,13 +24,13 @@ import math
 
 import numpy as np
 import tensorflow as tf
-import wandb
 from autodp import mechanism_zoo
 from autodp import transformer_zoo
 from autodp.autodp_core import Mechanism
 from tensorflow import keras
 
 import deel
+import wandb
 from deel.lipdp.layers import DPLayer
 from deel.lipdp.losses import get_lip_constant_loss
 
