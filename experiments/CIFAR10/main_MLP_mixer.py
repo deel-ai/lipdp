@@ -26,6 +26,7 @@ import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import wandb
 from absl import app
 from absl import flags
 from ml_collections import config_dict
@@ -38,13 +39,15 @@ from tensorflow.keras.layers import Input
 from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
     compute_noise,
 )
+from wandb.keras import WandbCallback
+from wandb.keras import WandbMetricsLogger
 
-import wandb
 from deel.lip.activations import GroupSort
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
 from deel.lip.losses import MulticlassKR
 from deel.lip.losses import TauCategoricalCrossentropy
+from deel.lipdp.layers import DP_ClipGradient
 from deel.lipdp.layers import DP_Flatten
 from deel.lipdp.layers import DP_GroupSort
 from deel.lipdp.layers import DP_InputLayer
@@ -60,8 +63,6 @@ from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_cifar
-from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
@@ -70,6 +71,7 @@ cfg.alpha = 50.0
 cfg.beta_1 = 0.9
 cfg.beta_2 = 0.999
 cfg.batch_size = 500
+cfg.clip_loss_gradient = 10.0
 cfg.condense = True
 cfg.delta = 1e-5
 cfg.epsilon = 0.0
@@ -161,6 +163,7 @@ def create_model(cfg, InputUpperBound, input_shape=(32, 32, 3), num_classes=10):
     # layers.append(DP_LayerCentering())
     layers.append(DP_Flatten())
     layers.append(DP_SpectralDense(units=num_classes, use_bias=False))
+    layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
 
     model = DP_Sequential(
         layers,

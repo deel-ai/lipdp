@@ -133,7 +133,7 @@ class DP_ScaledL2NormPooling2D(deel.lip.layers.ScaledL2NormPooling2D, DPLayer):
         return False
 
 
-class LayerCentering(Layer):
+class LayerCentering(tf.keras.layers.Layer):
     def __init__(self, pixelwise=False, channelwise=True, **kwargs):
         self.pixelwise = pixelwise
         self.channelwise = channelwise
@@ -238,6 +238,52 @@ class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
 
     def has_parameters(self):
         return True
+
+
+@tf.custom_gradient
+def clip_gradient(x, clip_value):
+    """Clips the gradient during the backward pass.
+
+    Behave like identity function during the forward pass.
+    """
+
+    def grad_fn(dy):
+        # clip by norm each row
+        axes = list(range(1, len(dy.shape)))
+        clipped_dy = tf.clip_by_norm(dy, clip_value, axes=axes)
+        return clipped_dy, None  # No gradient for clip_value
+
+    return x, grad_fn
+
+
+class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
+    """Clips the gradient during the backward pass.
+
+    Behave like identity function during the forward pass.
+    The clipping is done automatically during the backward pass.
+
+    Attributes:
+        clip_value (float): The maximum norm of the gradient.
+    """
+
+    def __init__(self, clip_value, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.clip_value = clip_value
+
+    def call(self, inputs, *args, **kwargs):
+        return clip_gradient(inputs, self.clip_value)
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        raise ValueError("ClipGradient doesn't have parameters")
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return min(gradient_bound, self.clip_value)
+
+    def propagate_inputs(self, input_bound):
+        return input_bound
+
+    def has_parameters(self):
+        return False
 
 
 class DP_SplitResidual(tf.keras.layers.Layer, DPLayer):

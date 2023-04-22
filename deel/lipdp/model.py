@@ -24,13 +24,13 @@ import math
 
 import numpy as np
 import tensorflow as tf
+import wandb
 from autodp import mechanism_zoo
 from autodp import transformer_zoo
 from autodp.autodp_core import Mechanism
 from tensorflow import keras
 
 import deel
-import wandb
 from deel.lipdp.layers import DPLayer
 from deel.lipdp.losses import get_lip_constant_loss
 
@@ -109,15 +109,12 @@ def compute_gradient_bounds(model):
 
     # Forward pass to assess maximum activation norms
     for layer in model.layers_forward_order():
-        if isinstance(layer, DPLayer):
-            if layer.has_parameters():
-                assert len(layer.trainable_variables) == 1
-                input_bounds[layer.name] = input_bound
-            if model.cfg.run_eagerly:
-                print(f"Layer {layer.name} input bound: {input_bound}")
-            input_bound = layer.propagate_inputs(input_bound)
-        else:
-            raise ValueError(f"Ensure that {layer.name} is a DPLayer.")
+        assert isinstance(layer, DPLayer)
+        if model.cfg.run_eagerly:
+            print(f"Layer {layer.name} input bound: {input_bound}")
+        input_bounds[layer.name] = input_bound
+        input_bound = layer.propagate_inputs(input_bound)
+
     if model.cfg.run_eagerly:
         print(f"Layer {layer.name} input bound: {input_bound}")
 
@@ -126,9 +123,9 @@ def compute_gradient_bounds(model):
     # Backward pass to compute gradient norm bounds and accumulate Lip constant
     for layer in model.layers_backward_order():
         assert isinstance(layer, DPLayer)
+        layer_input_bound = input_bounds[layer.name]
         if layer.has_parameters():
             assert len(layer.trainable_variables) == 1
-            layer_input_bound = input_bounds[layer.name]
             var_name = layer.trainable_variables[0].name
             gradient_bounds[var_name] = layer.backpropagate_params(
                 layer_input_bound, gradient_bound
