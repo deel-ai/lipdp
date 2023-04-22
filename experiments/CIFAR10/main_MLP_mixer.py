@@ -26,6 +26,7 @@ import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import wandb
 from absl import app
 from absl import flags
 from ml_collections import config_dict
@@ -38,8 +39,9 @@ from tensorflow.keras.layers import Input
 from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
     compute_noise,
 )
+from wandb.keras import WandbCallback
+from wandb.keras import WandbMetricsLogger
 
-import wandb
 from deel.lip.activations import GroupSort
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
@@ -53,15 +55,12 @@ from deel.lipdp.layers import DP_LayerCentering
 from deel.lipdp.layers import DP_Permute
 from deel.lipdp.layers import DP_Reshape
 from deel.lipdp.layers import DP_SpectralDense
-from deel.lipdp.layers import LazyBuild
 from deel.lipdp.layers import make_residuals
 from deel.lipdp.losses import get_lip_constant_loss
 from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_cifar
-from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
@@ -129,33 +128,33 @@ def create_model(cfg, InputUpperBound, input_shape=(32, 32, 3), num_classes=10):
     layers.append(DP_SpectralDense(units=cfg.hidden_size, use_bias=False))
 
     for _ in range(cfg.num_mixer_layers):
-        lazy_builders = [
+        to_add = [
             # token mixing
             # TODO: add LayerNorm ?
-            LazyBuild(DP_Permute, (2, 1)),
-            LazyBuild(DP_SpectralDense, units=cfg.mlp_seq_dim, use_bias=False),
-            LazyBuild(DP_GroupSort, 2),
-            LazyBuild(DP_SpectralDense, units=seq_len, use_bias=False),
-            LazyBuild(DP_Permute, (2, 1)),
+            DP_Permute((2, 1)),
+            DP_SpectralDense(units=cfg.mlp_seq_dim, use_bias=False),
+            DP_GroupSort(2),
+            DP_SpectralDense(units=seq_len, use_bias=False),
+            DP_Permute((2, 1)),
         ]
 
         if cfg.skip_connections:
-            layers += make_residuals("1-lip-add", lazy_builders)
+            layers += make_residuals("1-lip-add", to_add)
         else:
-            layers += [lazy_builder.build() for lazy_builder in lazy_builders]
+            layers += to_add
 
-        lazy_builders = [
+        to_add = [
             # channel mixing
             # TODO: add LayerNorm ?
-            LazyBuild(DP_SpectralDense, units=cfg.mlp_channel_dim, use_bias=False),
-            LazyBuild(DP_GroupSort, 2),
-            LazyBuild(DP_SpectralDense, units=cfg.hidden_size, use_bias=False),
+            DP_SpectralDense(units=cfg.mlp_channel_dim, use_bias=False),
+            DP_GroupSort(2),
+            DP_SpectralDense(units=cfg.hidden_size, use_bias=False),
         ]
 
         if cfg.skip_connections:
-            layers += make_residuals("1-lip-add", lazy_builders)
+            layers += make_residuals("1-lip-add", to_add)
         else:
-            layers += [lazy_builder.build() for lazy_builder in lazy_builders]
+            layers += to_add
 
     # TO REPLACE ?
     # layers.append(DP_LayerCentering())

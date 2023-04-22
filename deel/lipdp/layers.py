@@ -133,7 +133,7 @@ class DP_ScaledL2NormPooling2D(deel.lip.layers.ScaledL2NormPooling2D, DPLayer):
         return False
 
 
-class LayerCentering(Layer):
+class LayerCentering(tf.keras.layers.Layer):
     def __init__(self, pixelwise=False, channelwise=True, **kwargs):
         self.pixelwise = pixelwise
         self.channelwise = channelwise
@@ -342,28 +342,11 @@ class DP_WrappedResidual(tf.keras.layers.Layer, DPLayer):
         return self.block.nm_coef
 
 
-class LazyBuild:
-    """Lazy initialization design pattern.
-
-    This class is used to delay the initialization of a layer until the
-    build method is called.
-    """
-
-    def __init__(self, layer_cls, *args, **kwargs):
-        self.layer_cls = layer_cls
-        self.args = args
-        self.kwargs = kwargs
-
-    def build(self):
-        return self.layer_cls(*self.args, **self.kwargs)
-
-
-def make_residuals(merge_policy, lazy_builders):
+def make_residuals(merge_policy, wrapped_layers):
     layers = [DP_SplitResidual()]
 
-    for lazy_builder in lazy_builders:
-        block = lazy_builder.build()
-        residual_block = DP_WrappedResidual(block)
+    for layer in wrapped_layers:
+        residual_block = DP_WrappedResidual(layer)
         layers.append(residual_block)
 
     layers.append(DP_MergeResidual(merge_policy))
