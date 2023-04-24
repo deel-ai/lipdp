@@ -41,7 +41,6 @@ from deel.lipdp.layers import (
     DP_LayerCentering,
     DPLayer,
     make_residuals,
-    LazyBuild,
 )
 from deel.lipdp.losses import KCosineSimilarity, k_cosine_similarity
 from deel.lipdp.model import DP_LipNet, DP_Sequential, DP_Accountant
