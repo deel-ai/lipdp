@@ -162,7 +162,7 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
                 noise_msg = (
                     f"Adding noise of stddev : {stddev}"
                     f" to variable {var.name}"
-                    f" of sensivity {gradient_bounds[var.name]}"
+                    f" of sensitivity {gradient_bounds[var.name]}"
                     f" and effective norm {tf.norm(grad)}"
                 )
                 print(noise_msg)
@@ -175,15 +175,15 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
 
 def global_noisify(model, gradient_bounds, trainable_vars, gradients):
     global_bound = np.sqrt(sum([bound**2 for bound in gradient_bounds.values()]))
-    global_sensivity = global_bound / model.cfg.batch_size
-    stddev = model.cfg.noise_multiplier * global_sensivity
+    global_sensitivity = global_bound / model.cfg.batch_size
+    stddev = model.cfg.noise_multiplier * global_sensitivity
     noises = [tf.random.normal(shape=g.shape, stddev=stddev) for g in gradients]
     if model.cfg.run_eagerly:
         for grad, var in zip(gradients, trainable_vars):
             noise_msg = (
                 f"Adding noise of stddev : {stddev}"
                 f" to variable {var.name}"
-                f" of sensivity {global_sensivity}"
+                f" of sensivity {global_sensitivity}"
                 f" and effective norm {tf.norm(grad)}"
             )
             print(noise_msg)

@@ -38,6 +38,7 @@ from deel.lipdp.layers import (
     DP_InputLayer,
     DP_Flatten,
     DP_ClipGradient,
+    DP_AddBias,
     DP_LayerCentering,
     DPLayer,
     make_residuals,

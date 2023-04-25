@@ -285,6 +285,61 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
     def has_parameters(self):
         return False
 
+        
+class AddBias(tf.keras.layers.Layer):
+    """Adds a bias to the input.
+
+    Remark: the euclidean norm of the bias must be bounded in advance.
+    Note that this is the euclidean norm of the whole bias vector, not
+    the norm of each element of the bias vector.
+
+    Warning: beware zero gradients outside the ball of norm norm_max.
+    In the future, we might choose a smoother projection on the ball to ensure
+    that the gradient remains non zero outside the ball.
+    """
+
+    def __init__(self, norm_max, **kwargs):
+        super().__init__(**kwargs)
+        self.norm_max = norm_max
+
+    def build(self, input_shape):
+        self.bias = self.add_weight(
+            name="bias",
+            shape=(input_shape[-1],),
+            initializer="zeros",
+            trainable=True,
+        )
+
+    def call(self, inputs, **kwargs):
+        # parametrize the bias so it belongs to a ball of norm norm_max.
+        bias = tf.clip_by_norm(self.bias, self.norm_max)  # 1-Lipschitz operation.
+        return inputs + bias
+
+
+class DP_AddBias(AddBias, DPLayer):
+    """Adds a bias to the input.
+
+    The bias is projected on the ball of norm `norm_max` during training.
+    The projection on the ball is a 1-Lipschitz function, since the ball
+    is convex.
+    """
+
+    def __init__(self, *args, nm_coef=1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.nm_coef = nm_coef
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        return gradient_bound  # clipping is a 1-Lipschitz operation.
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound  # adding is a 1-Lipschitz operation.
+
+    def propagate_inputs(self, input_bound):
+        return input_bound + self.norm_max
+
+    def has_parameters(self):
+        return True
+
 
 class DP_SplitResidual(tf.keras.layers.Layer, DPLayer):
     def __init__(self, *args, **kwargs):
