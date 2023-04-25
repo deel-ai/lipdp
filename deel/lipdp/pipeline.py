@@ -38,13 +38,17 @@ def load_data_cifar(cfg):
         x_train, x_test = tf.image.rgb_to_hsv(x_train), tf.image.rgb_to_hsv(x_test)
     if cfg.representation == "YIQ":
         x_train, x_test = tf.image.rgb_to_yiq(x_train), tf.image.rgb_to_yiq(x_test)
+    if cfg.representation == "YUV":
+        x_train, x_test = tf.image.rgb_to_yuv(x_train), tf.image.rgb_to_yuv(x_test)
 
     # One hot labels for multiclass classifier
     y_train = to_categorical(y_train_ord)
     y_test = to_categorical(y_test_ord)
-    # Get theoretical L2 norm upper bound
-    theoretical_upper_bound = np.sqrt(np.prod(x_train[0].shape))
-    upper_bound = theoretical_upper_bound * cfg.input_clipping
+    # Get L2 norm upper bound
+    upper_bound = (
+        np.max(tf.reduce_sum(x_train**2, axis=list(range(1, x_train.ndim))) ** 0.5)
+        * cfg.input_clipping
+    )
     # Clip training and testing set imgs
     x_train = tf.clip_by_norm(x_train, upper_bound, axes=list(range(1, x_train.ndim)))
     x_test = tf.clip_by_norm(x_test, upper_bound, axes=list(range(1, x_test.ndim)))
@@ -60,9 +64,11 @@ def load_data_mnist(cfg):
     # One hot labels for multiclass classifier
     y_train = to_categorical(y_train_ord)
     y_test = to_categorical(y_test_ord)
-    # Get theoretical L2 norm upper bound
-    theoretical_upper_bound = np.sqrt(np.prod(x_train[0].shape))
-    upper_bound = theoretical_upper_bound * cfg.input_clipping
+    # Get L2 norm upper bound
+    upper_bound = (
+        np.max(tf.reduce_sum(x_train**2, axis=list(range(1, x_train.ndim))) ** 0.5)
+        * cfg.input_clipping
+    )
     # Clip training and testing set imgs
     x_train = tf.clip_by_norm(x_train, upper_bound, axes=list(range(1, x_train.ndim)))
     x_test = tf.clip_by_norm(x_test, upper_bound, axes=list(range(1, x_train.ndim)))
@@ -78,9 +84,11 @@ def load_data_fashion_mnist(cfg):
     # One hot labels for multiclass classifier
     y_train = to_categorical(y_train_ord)
     y_test = to_categorical(y_test_ord)
-    # Get theoretical L2 norm upper bound
-    theoretical_upper_bound = np.sqrt(np.prod(x_train[0].shape))
-    upper_bound = theoretical_upper_bound * cfg.input_clipping
+    # Get L2 norm upper bound
+    upper_bound = (
+        np.max(tf.reduce_sum(x_train**2, axis=list(range(1, x_train.ndim))) ** 0.5)
+        * cfg.input_clipping
+    )
     # Clip training and testing set imgs
     x_train = tf.clip_by_norm(x_train, upper_bound, axes=list(range(1, x_train.ndim)))
     x_test = tf.clip_by_norm(x_test, upper_bound, axes=list(range(1, x_train.ndim)))

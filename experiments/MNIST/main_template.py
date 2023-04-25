@@ -20,16 +20,18 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import math
 import os
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import tensorflow_privacy
 from absl import app
 from absl import flags
 from ml_collections import config_dict
 from ml_collections import config_flags
+from models_MNIST import create_ConvNet
+from models_MNIST import create_Dense_Model
 from tensorflow import keras
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
@@ -39,28 +41,17 @@ from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
     compute_noise,
 )
 
-import deel
 import wandb
-from deel.lip.activations import FullSort
 from deel.lip.activations import GroupSort
-from deel.lip.layers import ScaledAveragePooling2D
-from deel.lip.layers import ScaledL2NormPooling2D
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
 from deel.lip.losses import MulticlassKR
 from deel.lip.losses import TauCategoricalCrossentropy
-from deel.lipdp.layers import DP_Flatten
-from deel.lipdp.layers import DP_LayerCentering
-from deel.lipdp.layers import DP_ResidualSpectralDense
-from deel.lipdp.layers import DP_ScaledL2NormPooling2D
-from deel.lipdp.layers import DP_SpectralConv2D
-from deel.lipdp.layers import DP_SpectralDense
 from deel.lipdp.losses import get_lip_constant_loss
 from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
-from deel.lipdp.model import DP_LipNet
-from deel.lipdp.model import DP_LipNet_Model
-from deel.lipdp.pipeline import load_data_cifar
+from deel.lipdp.model import DP_Sequential
+from deel.lipdp.pipeline import load_data_mnist
 from wandb.keras import WandbCallback
 from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
@@ -68,13 +59,15 @@ from wandb_sweeps.src_config.sweep_config import get_sweep_config
 cfg = config_dict.ConfigDict()
 
 cfg.alpha = 50.0
+cfg.architecture = "Dense"
 cfg.beta_1 = 0.9
 cfg.beta_2 = 0.999
-cfg.batch_size = 256
+cfg.batch_size = 512
 cfg.condense = True
+cfg.clip_loss_gradient = 10.0
 cfg.delta = 1e-5
 cfg.epsilon = 0.0
-cfg.input_clipping = 1.0
+cfg.input_clipping = 0.7
 cfg.K = 0.99
 cfg.learning_rate = 1e-2
 cfg.lip_coef = 1.0
@@ -83,17 +76,16 @@ cfg.log_wandb = "disabled"
 cfg.min_margin = 0.5
 cfg.min_norm = 5.21
 cfg.model_name = "No_name"
-cfg.noise_multiplier = 0.8
+cfg.noise_multiplier = 1.8
 cfg.noisify_strategy = "local"
 cfg.optimizer = "Adam"
 cfg.N = 50_000
 cfg.num_classes = 10
 cfg.opt_iterations = 10
-cfg.representation = "RGB"
 cfg.run_eagerly = False
 cfg.save = False
 cfg.save_folder = os.getcwd()
-cfg.steps = 3000
+cfg.steps = 1000
 cfg.sweep_id = ""
 cfg.tau = 1.0
 cfg.tag = "Default"
@@ -102,81 +94,12 @@ _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 
 
 def create_model(cfg, InputUpperBound):
-    model = DP_LipNet(
-        [
-            DP_SpectralConv2D(
-                filters=32,
-                kernel_size=3,
-                input_shape=(32, 32, 3),
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            DP_SpectralConv2D(
-                filters=32,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
-            DP_LayerCentering(),
-            DP_SpectralConv2D(
-                filters=64,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            DP_SpectralConv2D(
-                filters=64,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
-            DP_LayerCentering(),
-            DP_SpectralConv2D(
-                filters=128,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            DP_SpectralConv2D(
-                filters=128,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
-            DP_LayerCentering(),
-            DP_SpectralConv2D(
-                filters=256,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                activation=GroupSort(2),
-                strides=1,
-                use_bias=False,
-            ),
-            DP_ScaledL2NormPooling2D(pool_size=4, strides=4),
-            DP_Flatten(),
-            DP_LayerCentering(),
-            DP_SpectralDense(4096, use_bias=False),
-            DP_SpectralDense(10, use_bias=False),
-        ],
-        X=InputUpperBound,
-        cfg=cfg,
-        noisify_strategy=cfg.noisify_strategy,
-    )
+    if cfg.architecture == "ConvNet":
+        model = create_ConvNet(cfg, InputUpperBound)
+    elif cfg.architecture == "Dense":
+        model = create_Dense_Model(cfg, InputUpperBound)
+    else:
+        raise ValueError(f"Invalid architecture argument {cfg.architecture}")
     return model
 
 
@@ -238,10 +161,10 @@ def compile_model(model, cfg):
 
 def train():
     if cfg.log_wandb == "run":
-        wandb.init(project="dp-lipschitz_CIFAR10", mode="online", config=cfg)
+        wandb.init(project="dp-lipschitz_MNIST", mode="online", config=cfg)
 
     elif cfg.log_wandb == "disabled":
-        wandb.init(project="dp-lipschitz_CIFAR10", mode="disabled", config=cfg)
+        wandb.init(project="dp-lipschitz_MNIST", mode="disabled", config=cfg)
 
     elif cfg.log_wandb.startswith("sweep_"):
         wandb.init()
@@ -251,12 +174,14 @@ def train():
     num_epochs = cfg.steps // (cfg.N // cfg.batch_size)
     # cfg.noise_multiplier = compute_noise(cfg.N,cfg.batch_size,cfg.epsilon,num_epochs,cfg.delta,1e-6)
 
-    x_train, x_test, y_train, y_test, InputUpperBound = load_data_cifar(cfg)
+    x_train, x_test, y_train, y_test, InputUpperBound = load_data_mnist(cfg)
     model = create_model(cfg, InputUpperBound)
     model = compile_model(model, cfg)
     model.summary()
     num_epochs = cfg.steps // (cfg.N // cfg.batch_size)
-    callbacks = [  # WandbCallback(monitor='val_accuracy'),EarlyStopping(monitor="val_accuracy",min_delta=0.001,patience=15),
+    callbacks = [
+        WandbCallback(save_model=False, monitor="val_accuracy"),
+        EarlyStopping(monitor="val_accuracy", min_delta=0.001, patience=15),
         ReduceLROnPlateau(
             monitor="val_accuracy", factor=0.9, min_delta=0.0001, patience=5
         ),
@@ -295,7 +220,7 @@ def main(_):
     elif cfg.log_wandb.startswith("sweep_"):
         if cfg.sweep_id == "":
             sweep_config = get_sweep_config(cfg)
-            sweep_id = wandb.sweep(sweep=sweep_config, project="dp-lipschitz_CIFAR10")
+            sweep_id = wandb.sweep(sweep=sweep_config, project="dp-lipschitz_MNIST")
         else:
             sweep_id = cfg.sweep_id
         wandb.agent(sweep_id, function=train, count=cfg.opt_iterations)

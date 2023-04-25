@@ -25,7 +25,7 @@ from abc import abstractmethod
 import numpy as np
 import tensorflow as tf
 
-import deel
+import deel.lip
 
 
 class DPLayer:
