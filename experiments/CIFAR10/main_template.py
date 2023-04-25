@@ -26,11 +26,12 @@ import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import wandb
 from absl import app
 from absl import flags
 from ml_collections import config_dict
 from ml_collections import config_flags
+from models_CIFAR import create_MLP_Mixer
+from models_CIFAR import create_VGG
 from tensorflow import keras
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
@@ -39,34 +40,26 @@ from tensorflow.keras.layers import Input
 from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
     compute_noise,
 )
-from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 
+import wandb
 from deel.lip.activations import GroupSort
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
 from deel.lip.losses import MulticlassKR
 from deel.lip.losses import TauCategoricalCrossentropy
-from deel.lipdp.layers import DP_ClipGradient
-from deel.lipdp.layers import DP_Flatten
-from deel.lipdp.layers import DP_GroupSort
-from deel.lipdp.layers import DP_InputLayer
-from deel.lipdp.layers import DP_Lambda
-from deel.lipdp.layers import DP_LayerCentering
-from deel.lipdp.layers import DP_Permute
-from deel.lipdp.layers import DP_Reshape
-from deel.lipdp.layers import DP_SpectralDense
-from deel.lipdp.layers import make_residuals
 from deel.lipdp.losses import get_lip_constant_loss
 from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_cifar
+from wandb.keras import WandbCallback
+from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
 
 cfg.alpha = 50.0
+cfg.architecture = "MLP_Mixer"
 cfg.beta_1 = 0.9
 cfg.beta_2 = 0.999
 cfg.batch_size = 500
@@ -108,72 +101,13 @@ cfg.loss = "TauCategoricalCrossentropy"
 _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 
 
-def create_model(cfg, InputUpperBound, input_shape=(32, 32, 3), num_classes=10):
-    layers = [DP_InputLayer(input_shape=input_shape)]
-
-    layers.append(
-        DP_Lambda(
-            tf.image.extract_patches,
-            arguments=dict(
-                sizes=[1, cfg.patch_size, cfg.patch_size, 1],
-                strides=[1, cfg.patch_size, cfg.patch_size, 1],
-                rates=[1, 1, 1, 1],
-                padding="VALID",
-            ),
-        )
-    )
-
-    # layers.append(DP_SpectralConv2D(filters=hidden_dim, kernel_size=patch_size, use_bias=False, strides=patch_size, padding="same"))
-    seq_len = (input_shape[0] // cfg.patch_size) * (input_shape[1] // cfg.patch_size)
-
-    layers.append(DP_Reshape((seq_len, (cfg.patch_size**2) * input_shape[-1])))
-    layers.append(DP_SpectralDense(units=cfg.hidden_size, use_bias=False))
-
-    for _ in range(cfg.num_mixer_layers):
-        to_add = [
-            # token mixing
-            # TODO: add LayerNorm ?
-            DP_Permute((2, 1)),
-            DP_SpectralDense(units=cfg.mlp_seq_dim, use_bias=False),
-            DP_GroupSort(2),
-            DP_SpectralDense(units=seq_len, use_bias=False),
-            DP_Permute((2, 1)),
-        ]
-
-        if cfg.skip_connections:
-            layers += make_residuals("1-lip-add", to_add)
-        else:
-            layers += to_add
-
-        to_add = [
-            # channel mixing
-            # TODO: add LayerNorm ?
-            DP_SpectralDense(units=cfg.mlp_channel_dim, use_bias=False),
-            DP_GroupSort(2),
-            DP_SpectralDense(units=cfg.hidden_size, use_bias=False),
-        ]
-
-        if cfg.skip_connections:
-            layers += make_residuals("1-lip-add", to_add)
-        else:
-            layers += to_add
-
-    # TO REPLACE ?
-    # layers.append(DP_LayerCentering())
-    layers.append(DP_Flatten())
-    layers.append(DP_SpectralDense(units=num_classes, use_bias=False))
-    layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
-
-    model = DP_Sequential(
-        layers,
-        X=InputUpperBound,
-        cfg=cfg,
-        noisify_strategy=cfg.noisify_strategy,
-        name="mlp_mixer",
-    )
-
-    model.build(input_shape=(None, *input_shape))
-
+def create_model(cfg, InputUpperBound):
+    if cfg.architecture == "MLP_Mixer":
+        model = create_MLP_Mixer(cfg, InputUpperBound)
+    elif cfg.architecture == "VGG":
+        model = create_VGG(cfg, InputUpperBound)
+    else:
+        raise ValueError(f"Invalid architecture argument {cfg.architecture}")
     return model
 
 

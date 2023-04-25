@@ -39,11 +39,16 @@ def get_sweep_config(cfg):
     common_hyper_parameters = {
         "input_clipping": {
             "max": 1.0,
-            "min": 0.2,
+            "min": 0.1,
             "distribution": "log_uniform_values",
         },
-        "batch_size": {"values": [2048], "distribution": "categorical"},
-        "steps": {"values": [1000], "distribution": "categorical"},
+        "clip_loss_gradient": {
+            "max": 100.0,
+            "min": 0.01,
+            "distribution": "log_uniform_values",
+        },
+        "batch_size": {"values": [512, 2048], "distribution": "categorical"},
+        "steps": {"values": [1000, 3000], "distribution": "categorical"},
     }
 
     learning_rate_SGD = {
@@ -65,7 +70,7 @@ def get_sweep_config(cfg):
     if cfg.loss == "MulticlassHinge":
         parameters_loss = {
             "min_margin": {
-                "max": 1.0,
+                "max": 3.0,
                 "min": 0.001,
                 "distribution": "log_uniform_values",
             },
@@ -89,12 +94,12 @@ def get_sweep_config(cfg):
 
     elif cfg.loss == "TauCategoricalCrossentropy":
         parameters_loss = {
-            "tau": {"max": 18.0, "min": 6.0, "distribution": "log_uniform_values"},
+            "tau": {"max": 18.0, "min": 0.001, "distribution": "log_uniform_values"},
         }
 
     elif cfg.loss == "KCosineSimilarity":
         parameters_loss = {
-            "K": {"max": 1.0, "min": 0.3, "distribution": "log_uniform_values"},
+            "K": {"max": 1.0, "min": 0.01, "distribution": "log_uniform_values"},
         }
 
     else:
@@ -118,9 +123,7 @@ def get_sweep_config(cfg):
     }
 
     epochs = cfg.steps // (cfg.N // cfg.batch_size)
-    cfg.noise_multiplier = compute_noise(
-        cfg.N, cfg.batch_size, cfg.epsilon, epochs, cfg.delta, 1e-6
-    )
+
     # Handle sweep
     sweep_name = cfg.log_wandb[len("sweep_") :]
     sweep_config["name"] = sweep_name

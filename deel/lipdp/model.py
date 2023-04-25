@@ -24,23 +24,39 @@ import math
 
 import numpy as np
 import tensorflow as tf
-import wandb
+import tensorflow_privacy as tf_privacy
 from autodp import mechanism_zoo
 from autodp import transformer_zoo
 from autodp.autodp_core import Mechanism
 from tensorflow import keras
 
 import deel
+import wandb
 from deel.lipdp.layers import DPLayer
 from deel.lipdp.losses import get_lip_constant_loss
 
 
 class DP_Accountant(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
-        niter = (epoch + 1) * math.ceil(self.model.cfg.N / self.model.cfg.batch_size)
-        epsilon, delta = get_eps_delta(model=self.model, niter=niter)
-        print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
-        wandb.log({"epsilon": epsilon})
+        if self.model.cfg.noisify_strategy == "local":
+            niter = (epoch + 1) * math.ceil(
+                self.model.cfg.N / self.model.cfg.batch_size
+            )
+            epsilon, delta = get_eps_delta(model=self.model, niter=niter)
+            print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
+            wandb.log({"epsilon": epsilon})
+        elif self.model.cfg.noisify_strategy == "global":
+            epsilon, RDP_order = tf_privacy.compute_dp_sgd_privacy(
+                self.model.cfg.N,
+                self.model.cfg.batch_size,
+                self.model.cfg.noise_multiplier,
+                epoch + 1,
+                self.model.cfg.delta,
+            )
+            print(
+                f"\n {(epsilon,self.model.cfg.delta)}-DP guarantees for epoch {epoch+1} \n"
+            )
+            wandb.log({"epsilon": epsilon})
 
 
 class Global_DPGD_Mechanism(Mechanism):
@@ -191,7 +207,7 @@ def global_noisify(model, gradient_bounds, trainable_vars, gradients):
     return noisy_grads
 
 
-class DP_LipNet(deel.lip.model.Sequential):
+class DP_Sequential(deel.lip.model.Sequential):
     """ "Model Class based on the DEEL Sequential model. Takes into account the architecture, only the following components are allowed :
     - Input
     - SpectralDense
@@ -257,7 +273,7 @@ class DP_LipNet(deel.lip.model.Sequential):
         return {m.name: m.result() for m in self.metrics}
 
 
-class DP_Sequential(deel.lip.model.Model):
+class DP_Model(deel.lip.model.Model):
     """ "Model Class based on the DEEL Sequential model. Takes into account the architecture, only the following components are allowed :
     - Input
     - SpectralDense
