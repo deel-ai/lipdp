@@ -214,6 +214,28 @@ class DP_BoundedInput(tf.keras.layers.Layer, DPLayer):
         return False
 
 
+class DP_ScaledL2NormPooling1D(tf.keras.layers.Layer, DPLayer):
+    def __init__(self, axis=-1, eps=1e-6, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.eps = eps
+        self.axis = axis
+
+    def call(self, inputs, training=True, **kwargs):
+        return tf.sqrt(tf.reduce_sum(tf.square(inputs), axis=self.axis) + self.eps)
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        raise ValueError("DP_ScaledL2NormPooling1D doesn't have parameters")
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
+
+    def propagate_inputs(self, input_bound):
+        return input_bound
+
+    def has_parameters(self):
+        return False
+
+
 class LayerCentering(tf.keras.layers.Layer):
     def __init__(self, pixelwise=False, channelwise=True, **kwargs):
         self.pixelwise = pixelwise
