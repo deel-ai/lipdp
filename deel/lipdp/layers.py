@@ -214,6 +214,33 @@ class DP_SpectralDense(deel.lip.layers.SpectralDense, DPLayer):
         return True
 
 
+class DP_QuickSpectralDense(tf.keras.layers.Dense, DPLayer):
+    def __init__(self, *args, nm_coef=1, **kwargs):
+        if "use_bias" in kwargs and kwargs["use_bias"]:
+            raise ValueError("No bias allowed.")
+        kwargs["use_bias"] = False
+        kwargs.update(
+            dict(
+                kernel_initializer="orthogonal",
+                kernel_constraint="deel-lip>SpectralConstraint",
+            )
+        )
+        super().__init__(*args, **kwargs)
+        self.nm_coef = nm_coef
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        return input_bound * gradient_bound
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
+
+    def propagate_inputs(self, input_bound):
+        return input_bound
+
+    def has_parameters(self):
+        return True
+
+
 class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
     def __init__(self, *args, nm_coef=1, **kwargs):
         if "use_bias" in kwargs and kwargs["use_bias"]:
