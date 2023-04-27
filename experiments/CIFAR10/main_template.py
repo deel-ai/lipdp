@@ -59,30 +59,30 @@ from wandb_sweeps.src_config.sweep_config import get_sweep_config
 cfg = config_dict.ConfigDict()
 
 cfg.alpha = 50.0
-cfg.architecture = "MLP_Mixer"
+cfg.architecture = "VGG"
 cfg.beta_1 = 0.9
 cfg.beta_2 = 0.999
-cfg.batch_size = 500
-cfg.clip_loss_gradient = 10.0
+cfg.batch_size = 10_000
+cfg.clip_loss_gradient = 1e-4
 cfg.condense = True
 cfg.delta = 1e-5
 cfg.epsilon = 0.0
-cfg.hidden_size = 64
-cfg.input_clipping = 0.5
+cfg.hidden_size = 128
+cfg.input_clipping = 0.2
 cfg.K = 0.99
 cfg.learning_rate = 1e-3
 cfg.lip_coef = 1.0
 cfg.log_wandb = "disabled"
 cfg.min_margin = 0.5
 cfg.min_norm = 5.21
-cfg.mlp_channel_dim = 64
-cfg.mlp_seq_dim = 64
-cfg.model_name = "No_name"
-cfg.noise_multiplier = 1.2
+cfg.mlp_channel_dim = 128
+cfg.mlp_seq_dim = 128
+cfg.model_name = "CIFAR10"
+cfg.noise_multiplier = 5.0
 cfg.noisify_strategy = "global"
-cfg.num_mixer_layers = 1
+cfg.num_mixer_layers = 2
 cfg.optimizer = "Adam"
-cfg.patch_size = 4
+cfg.patch_size = 2
 cfg.N = 50_000
 cfg.num_classes = 10
 cfg.opt_iterations = 10
@@ -90,7 +90,7 @@ cfg.representation = "HSV"
 cfg.run_eagerly = False
 cfg.save = False
 cfg.save_folder = os.getcwd()
-cfg.steps = math.ceil(cfg.N / cfg.batch_size) * 10
+cfg.steps = math.ceil(cfg.N / cfg.batch_size) * 40
 cfg.skip_connections = True
 cfg.sweep_id = ""
 cfg.tau = 8.0
@@ -191,7 +191,7 @@ def train():
     model = compile_model(model, cfg)
     model.summary()
     callbacks = [
-        WandbCallback(monitor="val_accuracy"),
+        WandbCallback(save_model=False, monitor="val_accuracy"),
         EarlyStopping(monitor="val_accuracy", min_delta=0.001, patience=15),
         ReduceLROnPlateau(
             monitor="val_accuracy", factor=0.9, min_delta=0.0001, patience=5
