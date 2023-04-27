@@ -24,7 +24,7 @@ import math
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_privacy as tf_privacy
+
 from autodp import mechanism_zoo
 from autodp import transformer_zoo
 from autodp.autodp_core import Mechanism
@@ -38,28 +38,36 @@ from deel.lipdp.losses import get_lip_constant_loss
 
 class DP_Accountant(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
-        if self.model.cfg.noisify_strategy == "local":
-            niter = (epoch + 1) * math.ceil(
-                self.model.cfg.N / self.model.cfg.batch_size
-            )
-            epsilon, delta = get_eps_delta(model=self.model, niter=niter)
-            print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
-            wandb.log({"epsilon": epsilon})
-        elif self.model.cfg.noisify_strategy == "global":
-            epsilon, RDP_order = tf_privacy.compute_dp_sgd_privacy(
-                self.model.cfg.N,
-                self.model.cfg.batch_size,
-                self.model.cfg.noise_multiplier,
-                epoch + 1,
-                self.model.cfg.delta,
-            )
-            print(
-                f"\n {(epsilon,self.model.cfg.delta)}-DP guarantees for epoch {epoch+1} \n"
-            )
-            wandb.log({"epsilon": epsilon})
-
+        niter = (epoch + 1) * math.ceil(self.model.cfg.N / self.model.cfg.batch_size)
+        epsilon, delta = get_eps_delta(model=self.model, niter=niter)
+        print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
+        wandb.log({"epsilon": epsilon})
 
 class Global_DPGD_Mechanism(Mechanism):
+    def __init__(self, prob, sigma, niter, delta, name="Layer_DPGD"):
+        # Init
+        Mechanism.__init__(self)
+        self.name = name
+        self.params = {"prob": prob, "sigmas": sigma, "niter": niter}
+
+        model_mech = mechanism_zoo.GaussianMechanism(sigma=sigma)
+        subsample = transformer_zoo.AmplificationBySampling()
+        SubsampledModelGaussian_mech = subsample(
+            model_mech, prob, improved_bound_flag=True
+        )
+        compose = transformer_zoo.Composition()
+        global_mech = compose([SubsampledModelGaussian_mech], [niter])
+
+        # Get relevant information
+        self.epsilon = global_mech.get_approxDP(delta=delta)
+        self.delta = delta
+
+        # Propagate updates
+        rdp_global = global_mech.RenyiDP
+        self.propagate_updates(rdp_global, type_of_update="RDP")
+
+
+class Local_DPGD_Mechanism(Mechanism):
     def __init__(self, prob, sigmas, niter, delta, name="Layer_DPGD"):
         # Init
         Mechanism.__init__(self)
@@ -107,13 +115,21 @@ def get_nm_coefs(model):
 
 
 def get_eps_delta(model, niter):
-    nm_coefs = get_nm_coefs(model)
     prob = model.cfg.batch_size / model.cfg.N
     # nm_coefs.values is seamingly in the right order :
-    sigmas = [model.cfg.noise_multiplier * coef for coef in nm_coefs.values()]
-    mech = Global_DPGD_Mechanism(
-        prob=prob, sigmas=sigmas, delta=model.cfg.delta, niter=niter
-    )
+    if model.cfg.noisify_strategy == "local":
+        nm_coefs = get_nm_coefs(model)
+        sigmas = [model.cfg.noise_multiplier * coef for coef in nm_coefs.values()]
+        mech = Local_DPGD_Mechanism(
+            prob=prob, sigmas=sigmas, delta=model.cfg.delta, niter=niter
+        )
+    if model.cfg.noisify_strategy == "global":
+        mech = Global_DPGD_Mechanism(
+            prob=prob,
+            sigma=model.cfg.noise_multiplier,
+            delta=model.cfg.delta,
+            niter=niter,
+        )
     return mech.epsilon, mech.delta
 
 
@@ -171,14 +187,14 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
                 model.cfg.noise_multiplier
                 * gradient_bounds[var.name]
                 * nm_coefs[var.name]
-                / model.cfg.batch_size
             )
             noises.append(tf.random.normal(shape=grad.shape, stddev=stddev))
             if model.cfg.run_eagerly:
+                upperboundgrad = gradient_bounds[var.name] * np.sqrt(model.cfg.batch_size)
                 noise_msg = (
                     f"Adding noise of stddev : {stddev}"
                     f" to variable {var.name}"
-                    f" of sensitivity {gradient_bounds[var.name]}"
+                    f" of gradient norm upper bound {upperboundgrad}"
                     f" and effective norm {tf.norm(grad)}"
                 )
                 print(noise_msg)
@@ -190,16 +206,18 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
 
 
 def global_noisify(model, gradient_bounds, trainable_vars, gradients):
-    global_bound = np.sqrt(sum([bound**2 for bound in gradient_bounds.values()]))
-    global_sensitivity = global_bound / model.cfg.batch_size
+    global_sensitivity = np.sqrt(
+        sum([bound**2 for bound in gradient_bounds.values()])
+    )
     stddev = model.cfg.noise_multiplier * global_sensitivity
     noises = [tf.random.normal(shape=g.shape, stddev=stddev) for g in gradients]
     if model.cfg.run_eagerly:
         for grad, var in zip(gradients, trainable_vars):
+            upperboundgrad = gradient_bounds[var.name] * np.sqrt(model.cfg.batch_size)
             noise_msg = (
                 f"Adding noise of stddev : {stddev}"
                 f" to variable {var.name}"
-                f" of sensivity {global_sensitivity}"
+                f" of gradient norm upper bound {upperboundgrad}"
                 f" and effective norm {tf.norm(grad)}"
             )
             print(noise_msg)

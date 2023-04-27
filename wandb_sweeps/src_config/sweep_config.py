@@ -43,12 +43,12 @@ def get_sweep_config(cfg):
             "distribution": "log_uniform_values",
         },
         "clip_loss_gradient": {
-            "max": 100.0,
-            "min": 0.01,
+            "max": 10.0,
+            "min": 1e-6,
             "distribution": "log_uniform_values",
         },
-        "batch_size": {"values": [512, 2048], "distribution": "categorical"},
-        "steps": {"values": [1000, 3000], "distribution": "categorical"},
+        "batch_size": {"values": [5_000, 10_000], "distribution": "categorical"},
+        "steps": {"values": [300, 600], "distribution": "categorical"},
     }
 
     learning_rate_SGD = {

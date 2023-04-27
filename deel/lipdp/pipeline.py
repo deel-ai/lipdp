@@ -29,18 +29,35 @@ from tensorflow.keras.utils import to_categorical
 
 
 def load_data_cifar(cfg):
+    """
+    Loads the CIFAR10 dataset and outputs a tuple containing x_train,x_test,y_train,y_test,upper_bound. Four image representation
+    systems are allowed "RGB", "HSV", "YIQ", "YUV". The upper_bound is computed on the clipped dataset of chosen representation.
+
+    Args :
+        cfg : Config object containing the chosen representation allow with the input_clipping factor.
+
+    Returns :
+        x_train (training dataset)
+        y_train (training labels)
+        x_test (testing dataset)
+        y_test (testing labels)
+        upper_bound (float) : Value of the maximum norm of transformed and clipped training dataset.
+    """
     # Load data
     (x_train, y_train_ord), (x_test, y_test_ord) = cifar10.load_data()
     # Normalize
     x_train = x_train / 255
     x_test = x_test / 255
-    if cfg.representation == "HSV":
+    if cfg.representation == "RGB":
+        pass
+    elif cfg.representation == "HSV":
         x_train, x_test = tf.image.rgb_to_hsv(x_train), tf.image.rgb_to_hsv(x_test)
-    if cfg.representation == "YIQ":
+    elif cfg.representation == "YIQ":
         x_train, x_test = tf.image.rgb_to_yiq(x_train), tf.image.rgb_to_yiq(x_test)
-    if cfg.representation == "YUV":
+    elif cfg.representation == "YUV":
         x_train, x_test = tf.image.rgb_to_yuv(x_train), tf.image.rgb_to_yuv(x_test)
-
+    else:
+        raise ValueError("Incorrect representation argument in config")
     # One hot labels for multiclass classifier
     y_train = to_categorical(y_train_ord)
     y_test = to_categorical(y_test_ord)
@@ -56,6 +73,20 @@ def load_data_cifar(cfg):
 
 
 def load_data_mnist(cfg):
+    """
+    Loads the MNIST dataset and outputs tuple containing x_train,x_test,y_train,y_test,upper_bound. The upper_bound is computed
+    the clipped dataset.
+
+    Args :
+        cfg : Config object containing the chosen representation allow with the input_clipping factor.
+
+    Returns :
+        x_train (training dataset)
+        y_train (training labels)
+        x_test (testing dataset)
+        y_test (testing labels)
+        upper_bound (float) : Value of the maximum norm of clipped training dataset.
+    """
     # Load data
     (x_train, y_train_ord), (x_test, y_test_ord) = mnist.load_data()
     # Normalize
@@ -76,6 +107,20 @@ def load_data_mnist(cfg):
 
 
 def load_data_fashion_mnist(cfg):
+    """
+    Loads the FashionMNIST dataset and outputs tuple containing x_train,x_test,y_train,y_test,upper_bound. The upper_bound is computed
+    the clipped dataset.
+
+    Args :
+        cfg : Config object containing the chosen representation allow with the input_clipping factor.
+
+    Returns :
+        x_train (training dataset)
+        y_train (training labels)
+        x_test (testing dataset)
+        y_test (testing labels)
+        upper_bound (float) : Value of the maximum norm of clipped training dataset.
+    """
     # Load data
     (x_train, y_train_ord), (x_test, y_test_ord) = fashion_mnist.load_data()
     # Normalize

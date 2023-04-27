@@ -53,7 +53,7 @@ class KCosineSimilarity(LossFunctionWrapper):
 
 # FIRST TRY : TO DEBUG
 def get_lip_constant_loss(cfg, input_bound):
-    """Get the Lipschitz constant of the loss function.
+    """ "Get the maximum norm of elementwise gradients, taking into account the renormalization factor consequent to the batch size.
 
     Args:
         cfg (dict): Configuration dictionary.
@@ -76,4 +76,4 @@ def get_lip_constant_loss(cfg, input_bound):
         L = 1 / float(cfg.K * cfg.min_norm)
     else:
         raise TypeError(f"Unrecognised Loss Function Argument {cfg.loss}")
-    return L
+    return L / cfg.batch_size
