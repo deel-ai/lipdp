@@ -37,9 +37,6 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Input
-from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
-    compute_noise,
-)
 
 import wandb
 from deel.lip.activations import GroupSort
@@ -58,11 +55,12 @@ from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
 
+cfg.add_biases = True
 cfg.alpha = 50.0
 cfg.architecture = "VGG"
 cfg.beta_1 = 0.9
 cfg.beta_2 = 0.999
-cfg.batch_size = 10_000
+cfg.batch_size = 2_048
 cfg.clip_loss_gradient = 1e-4
 cfg.condense = True
 cfg.delta = 1e-5
@@ -93,7 +91,7 @@ cfg.save_folder = os.getcwd()
 cfg.steps = math.ceil(cfg.N / cfg.batch_size) * 40
 cfg.skip_connections = True
 cfg.sweep_id = ""
-cfg.tau = 8.0
+cfg.tau = 1.0
 cfg.tag = "Default"
 cfg.loss = "TauCategoricalCrossentropy"
 

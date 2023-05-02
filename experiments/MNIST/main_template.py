@@ -37,9 +37,6 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Input
-from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
-    compute_noise,
-)
 
 import wandb
 from deel.lip.activations import GroupSort
@@ -58,13 +55,14 @@ from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
 
+cfg.add_biases = True
 cfg.alpha = 50.0
-cfg.architecture = "Dense"
+cfg.architecture = "ConvNet"
 cfg.beta_1 = 0.9
 cfg.beta_2 = 0.999
-cfg.batch_size = 512
+cfg.batch_size = 8_192
 cfg.condense = True
-cfg.clip_loss_gradient = 10.0
+cfg.clip_loss_gradient = 0.0001
 cfg.delta = 1e-5
 cfg.epsilon = 0.0
 cfg.input_clipping = 0.7
@@ -76,8 +74,8 @@ cfg.log_wandb = "disabled"
 cfg.min_margin = 0.5
 cfg.min_norm = 5.21
 cfg.model_name = "No_name"
-cfg.noise_multiplier = 1.8
-cfg.noisify_strategy = "local"
+cfg.noise_multiplier = 5.0
+cfg.noisify_strategy = "global"
 cfg.optimizer = "Adam"
 cfg.N = 50_000
 cfg.num_classes = 10
@@ -161,10 +159,10 @@ def compile_model(model, cfg):
 
 def train():
     if cfg.log_wandb == "run":
-        wandb.init(project="dp-lipschitz_MNIST", mode="online", config=cfg)
+        wandb.init(project="MNIST_ClipLess_SGD", mode="online", config=cfg)
 
     elif cfg.log_wandb == "disabled":
-        wandb.init(project="dp-lipschitz_MNIST", mode="disabled", config=cfg)
+        wandb.init(project="MNIST_ClipLess_SGD", mode="disabled", config=cfg)
 
     elif cfg.log_wandb.startswith("sweep_"):
         wandb.init()
@@ -220,7 +218,7 @@ def main(_):
     elif cfg.log_wandb.startswith("sweep_"):
         if cfg.sweep_id == "":
             sweep_config = get_sweep_config(cfg)
-            sweep_id = wandb.sweep(sweep=sweep_config, project="dp-lipschitz_MNIST")
+            sweep_id = wandb.sweep(sweep=sweep_config, project="MNIST_ClipLess_SGD")
         else:
             sweep_id = cfg.sweep_id
         wandb.agent(sweep_id, function=train, count=cfg.opt_iterations)

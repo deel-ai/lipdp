@@ -22,6 +22,7 @@
 # SOFTWARE.
 import tensorflow as tf
 
+from deel.lipdp.layers import DP_AddBias
 from deel.lipdp.layers import DP_ClipGradient
 from deel.lipdp.layers import DP_Flatten
 from deel.lipdp.layers import DP_GroupSort
@@ -108,46 +109,60 @@ def create_MLP_Mixer(cfg, InputUpperBound):
 
 
 def create_VGG(cfg, InputUpperBound):
-    model = DP_Sequential(
-        [
-            DP_SpectralConv2D(
-                filters=64,
-                kernel_size=5,
-                input_shape=(32, 32, 3),
-                kernel_initializer="orthogonal",
-                strides=1,
-                use_bias=False,
-            ),
-            DP_GroupSort(2),
-            DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
-            DP_LayerCentering(),
-            DP_SpectralConv2D(
-                filters=256,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                strides=1,
-                use_bias=False,
-            ),
-            DP_GroupSort(2),
-            DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
-            DP_LayerCentering(),
-            DP_SpectralConv2D(
-                filters=512,
-                kernel_size=3,
-                kernel_initializer="orthogonal",
-                strides=1,
-                use_bias=False,
-            ),
-            DP_GroupSort(2),
-            DP_ScaledL2NormPooling2D(pool_size=4, strides=4),
-            DP_Flatten(),
-            DP_LayerCentering(),
-            DP_SpectralDense(512, use_bias=False),
-            DP_SpectralDense(10, use_bias=False),
-            DP_ClipGradient(cfg.clip_loss_gradient),
-        ],
-        X=InputUpperBound,
-        cfg=cfg,
-        noisify_strategy=cfg.noisify_strategy,
-    )
+    all_layers = [
+        DP_SpectralConv2D(
+            filters=64,
+            kernel_size=5,
+            input_shape=(32, 32, 3),
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,
+        ),
+        DP_AddBias(norm_max=1),
+        DP_GroupSort(2),
+        DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
+        DP_LayerCentering(),
+        DP_SpectralConv2D(
+            filters=256,
+            kernel_size=3,
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,
+        ),
+        DP_AddBias(norm_max=1),
+        DP_GroupSort(2),
+        DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
+        DP_LayerCentering(),
+        DP_SpectralConv2D(
+            filters=512,
+            kernel_size=3,
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,
+        ),
+        DP_AddBias(norm_max=1),
+        DP_GroupSort(2),
+        DP_ScaledL2NormPooling2D(pool_size=4, strides=4),
+        DP_Flatten(),
+        DP_LayerCentering(),
+        DP_SpectralDense(512, use_bias=False),
+        DP_AddBias(norm_max=1),
+        DP_SpectralDense(10, use_bias=False),
+        DP_AddBias(norm_max=1),
+        DP_ClipGradient(cfg.clip_loss_gradient),
+    ]
+    if not cfg.add_biases:
+        model = DP_Sequential(
+            [layer for layer in all_layers if not isinstance(layer, DP_AddBias)],
+            X=InputUpperBound,
+            cfg=cfg,
+            noisify_strategy=cfg.noisify_strategy,
+        )
+    elif cfg.add_biases:
+        model = DP_Sequential(
+            all_layers,
+            X=InputUpperBound,
+            cfg=cfg,
+            noisify_strategy=cfg.noisify_strategy,
+        )
     return model

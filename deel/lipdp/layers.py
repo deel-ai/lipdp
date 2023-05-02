@@ -312,7 +312,7 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
     def has_parameters(self):
         return False
 
-        
+
 class AddBias(tf.keras.layers.Layer):
     """Adds a bias to the input.
 

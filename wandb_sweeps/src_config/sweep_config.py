@@ -48,7 +48,8 @@ def get_sweep_config(cfg):
             "distribution": "log_uniform_values",
         },
         "batch_size": {"values": [5_000, 10_000], "distribution": "categorical"},
-        "steps": {"values": [300, 600], "distribution": "categorical"},
+        "steps": {"values": [150, 300, 500], "distribution": "categorical"},
+        "add_biases": {"values": [True, False], "distribution": "categorical"},
     }
 
     learning_rate_SGD = {
