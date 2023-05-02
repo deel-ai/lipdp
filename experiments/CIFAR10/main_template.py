@@ -26,6 +26,7 @@ import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import wandb
 from absl import app
 from absl import flags
 from ml_collections import config_dict
@@ -37,8 +38,8 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Input
+from wandb.keras import WandbCallback
 
-import wandb
 from deel.lip.activations import GroupSort
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
@@ -49,8 +50,6 @@ from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_cifar
-from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
@@ -99,11 +98,11 @@ cfg.loss = "TauCategoricalCrossentropy"
 _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 
 
-def create_model(cfg, InputUpperBound):
+def create_model(cfg, upper_bound):
     if cfg.architecture == "MLP_Mixer":
-        model = create_MLP_Mixer(cfg, InputUpperBound)
+        model = create_MLP_Mixer(cfg, upper_bound)
     elif cfg.architecture == "VGG":
-        model = create_VGG(cfg, InputUpperBound)
+        model = create_VGG(cfg, upper_bound)
     else:
         raise ValueError(f"Invalid architecture argument {cfg.architecture}")
     return model
@@ -184,8 +183,8 @@ def train():
     num_epochs = math.ceil(cfg.steps / math.ceil(cfg.N / cfg.batch_size))
     # cfg.noise_multiplier = compute_noise(cfg.N,cfg.batch_size,cfg.epsilon,num_epochs,cfg.delta,1e-6)
 
-    x_train, x_test, y_train, y_test, InputUpperBound = load_data_cifar(cfg)
-    model = create_model(cfg, InputUpperBound)
+    x_train, x_test, y_train, y_test, upper_bound = load_data_cifar(cfg)
+    model = create_model(cfg, upper_bound)
     model = compile_model(model, cfg)
     model.summary()
     callbacks = [

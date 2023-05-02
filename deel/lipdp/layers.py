@@ -113,21 +113,99 @@ DP_Lambda = DP_GNP_Factory(tf.keras.layers.Lambda)
 DP_Permute = DP_GNP_Factory(tf.keras.layers.Permute)
 DP_Flatten = DP_GNP_Factory(tf.keras.layers.Flatten)
 DP_GroupSort = DP_GNP_Factory(deel.lip.activations.GroupSort)
+DP_ReLU = DP_GNP_Factory(tf.keras.layers.ReLU)
 DP_InputLayer = DP_GNP_Factory(tf.keras.layers.InputLayer)
 
 
-class DP_ScaledL2NormPooling2D(deel.lip.layers.ScaledL2NormPooling2D, DPLayer):
+class DP_MaxPool2D(tf.keras.layers.MaxPool2D, DPLayer):
+    """Max pooling layer that preserves the gradient norm.
+
+    Args:
+        layer_cls: Class of the layer to wrap.
+
+    Returns:
+        A differentially private layer that doesn't have parameters.
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        assert (
+            self.strides is None or self.strides == self.pool_size
+        ), "Ensure that strides == pool_size, otherwise it is not 1-Lipschitz."
 
     def backpropagate_params(self, input_bound, gradient_bound):
-        raise ValueError("ScaledL2NormPooling2D doesn't have parameters")
+        raise ValueError("Layer doesn't have parameters")
 
     def backpropagate_inputs(self, input_bound, gradient_bound):
         return 1 * gradient_bound
 
     def propagate_inputs(self, input_bound):
         return input_bound
+
+    def has_parameters(self):
+        return False
+
+
+class DP_ScaledL2NormPooling2D(deel.lip.layers.ScaledL2NormPooling2D, DPLayer):
+    """Max pooling layer that preserves the gradient norm.
+
+    Args:
+        layer_cls: Class of the layer to wrap.
+
+    Returns:
+        A differentially private layer that doesn't have parameters.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert (
+            self.strides is None or self.strides == self.pool_size
+        ), "Ensure that strides == pool_size, otherwise it is not 1-Lipschitz."
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        raise ValueError("Layer doesn't have parameters")
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
+
+    def propagate_inputs(self, input_bound):
+        return input_bound
+
+    def has_parameters(self):
+        return False
+
+
+class DP_BoundedInput(tf.keras.layers.Layer, DPLayer):
+    """Input layer that clips the input to a given norm.
+
+    Remark: every pipeline should start with this layer.
+
+    Attributes:
+        upper_bound: Maximum norm of the input.
+        enforce_clipping: If True (default), the input is clipped to the given norm.
+    """
+
+    def __init__(self, *args, upper_bound, enforce_clipping=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.upper_bound = upper_bound
+        self.enforce_clipping = enforce_clipping
+
+    def call(self, x, *args, **kwargs):
+        if self.enforce_clipping:
+            axes = list(range(1, len(x.shape)))
+            x = tf.clip_by_norm(x, self.upper_bound, axes=axes)
+        return x
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        raise ValueError("InputLayer doesn't have parameters")
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
+
+    def propagate_inputs(self, input_bound):
+        if input_bound is None:
+            return self.upper_bound
+        return min(self.upper_bound, input_bound)
 
     def has_parameters(self):
         return False
@@ -526,6 +604,15 @@ class DP_WrappedResidual(tf.keras.layers.Layer, DPLayer):
 
 
 def make_residuals(merge_policy, wrapped_layers):
+    """Returns a list of layers that implement a residual block.
+
+    Args:
+        merge_policy: either "add" or "1-lip-add".
+        wrapped_layers: a list of layers that will be wrapped in residual blocks.
+
+    Returns:
+        A list of layers that implement a residual block.
+    """
     layers = [DP_SplitResidual()]
 
     for layer in wrapped_layers:

@@ -20,9 +20,11 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import math
+
 import numpy as np
 import tensorflow as tf
-from keras.losses import LossFunctionWrapper
+from tensorflow.python.keras.losses import LossFunctionWrapper
 
 
 @tf.function
@@ -53,7 +55,7 @@ class KCosineSimilarity(LossFunctionWrapper):
 
 # FIRST TRY : TO DEBUG
 def get_lip_constant_loss(cfg, input_bound):
-    """ "Get the maximum norm of elementwise gradients, taking into account the renormalization factor consequent to the batch size.
+    """Get the maximum norm of elementwise gradients, taking into account the renormalization factor consequent to the batch size.
 
     Args:
         cfg (dict): Configuration dictionary.
@@ -71,7 +73,7 @@ def get_lip_constant_loss(cfg, input_bound):
     elif cfg.loss == "MulticlassHKR":
         L = cfg.alpha + 1
     elif cfg.loss == "TauCategoricalCrossentropy":
-        L = 2
+        L = math.sqrt(2)
     elif cfg.loss == "KCosineSimilarity":
         L = 1 / float(cfg.K * cfg.min_norm)
     else:

@@ -20,10 +20,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import numpy as np
-from tensorflow_privacy.privacy.analysis.compute_noise_from_budget_lib import (
-    compute_noise,
-)
 
 
 def get_sweep_config(cfg):
@@ -122,8 +118,6 @@ def get_sweep_config(cfg):
             **learning_rate_parameters,
         },
     }
-
-    epochs = cfg.steps // (cfg.N // cfg.batch_size)
 
     # Handle sweep
     sweep_name = cfg.log_wandb[len("sweep_") :]

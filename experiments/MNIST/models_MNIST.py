@@ -23,14 +23,11 @@
 import tensorflow as tf
 
 from deel.lipdp.layers import DP_AddBias
+from deel.lipdp.layers import DP_BoundedInput
 from deel.lipdp.layers import DP_ClipGradient
 from deel.lipdp.layers import DP_Flatten
 from deel.lipdp.layers import DP_GroupSort
-from deel.lipdp.layers import DP_InputLayer
-from deel.lipdp.layers import DP_Lambda
 from deel.lipdp.layers import DP_LayerCentering
-from deel.lipdp.layers import DP_Permute
-from deel.lipdp.layers import DP_Reshape
 from deel.lipdp.layers import DP_ScaledL2NormPooling2D
 from deel.lipdp.layers import DP_SpectralConv2D
 from deel.lipdp.layers import DP_SpectralDense
@@ -39,9 +36,10 @@ from deel.lipdp.model import DP_Model
 from deel.lipdp.model import DP_Sequential
 
 
-def create_Dense_Model(cfg, InputUpperBound):
+def create_Dense_Model(cfg, upper_bound):
     all_layers = [
-        DP_Flatten(input_shape=(28, 28, 1)),
+        DP_BoundedInput(input_shape=(28, 28, 1), upper_bound=upper_bound),
+        DP_Flatten(),
         DP_SpectralDense(1024, use_bias=False, nm_coef=1.0),
         DP_AddBias(norm_max=1),
         DP_GroupSort(2),
@@ -65,26 +63,24 @@ def create_Dense_Model(cfg, InputUpperBound):
     if not cfg.add_biases:
         model = DP_Sequential(
             [layer for layer in all_layers if not isinstance(layer, DP_AddBias)],
-            X=InputUpperBound,
             cfg=cfg,
             noisify_strategy=cfg.noisify_strategy,
         )
     elif cfg.add_biases:
         model = DP_Sequential(
             all_layers,
-            X=InputUpperBound,
             cfg=cfg,
             noisify_strategy=cfg.noisify_strategy,
         )
     return model
 
 
-def create_ConvNet(cfg, InputUpperBound):
+def create_ConvNet(cfg, upper_bound):
     all_layers = [
+        DP_BoundedInput(input_shape=(28, 28, 1), upper_bound=upper_bound),
         DP_SpectralConv2D(
             filters=16,
             kernel_size=3,
-            input_shape=(28, 28, 1),
             kernel_initializer="orthogonal",
             strides=1,
             use_bias=False,
@@ -114,14 +110,12 @@ def create_ConvNet(cfg, InputUpperBound):
     if not cfg.add_biases:
         model = DP_Sequential(
             [layer for layer in all_layers if not isinstance(layer, DP_AddBias)],
-            X=InputUpperBound,
             cfg=cfg,
             noisify_strategy=cfg.noisify_strategy,
         )
     elif cfg.add_biases:
         model = DP_Sequential(
             all_layers,
-            X=InputUpperBound,
             cfg=cfg,
             noisify_strategy=cfg.noisify_strategy,
         )

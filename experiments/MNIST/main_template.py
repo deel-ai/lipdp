@@ -26,6 +26,7 @@ import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import wandb
 from absl import app
 from absl import flags
 from ml_collections import config_dict
@@ -37,8 +38,9 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Input
+from wandb.keras import WandbCallback
+from wandb.keras import WandbMetricsLogger
 
-import wandb
 from deel.lip.activations import GroupSort
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
@@ -49,8 +51,6 @@ from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_mnist
-from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
@@ -169,14 +169,12 @@ def train():
         for key, value in wandb.config.items():
             cfg[key] = value
 
-    num_epochs = cfg.steps // (cfg.N // cfg.batch_size)
-    # cfg.noise_multiplier = compute_noise(cfg.N,cfg.batch_size,cfg.epsilon,num_epochs,cfg.delta,1e-6)
-
-    x_train, x_test, y_train, y_test, InputUpperBound = load_data_mnist(cfg)
-    model = create_model(cfg, InputUpperBound)
+    x_train, x_test, y_train, y_test, upper_bound = load_data_mnist(cfg)
+    model = create_model(cfg, upper_bound)
     model = compile_model(model, cfg)
     model.summary()
-    num_epochs = cfg.steps // (cfg.N // cfg.batch_size)
+    steps_per_epoch = math.ceil(cfg.N / cfg.batch_size)
+    num_epochs = math.ceil(cfg.steps / steps_per_epoch)
     callbacks = [
         WandbCallback(save_model=False, monitor="val_accuracy"),
         EarlyStopping(monitor="val_accuracy", min_delta=0.001, patience=15),
