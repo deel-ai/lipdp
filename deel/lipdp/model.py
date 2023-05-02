@@ -30,17 +30,8 @@ from autodp.autodp_core import Mechanism
 from tensorflow import keras
 
 import deel
-import wandb
 from deel.lipdp.layers import DPLayer
 from deel.lipdp.losses import get_lip_constant_loss
-
-
-class DP_Accountant(keras.callbacks.Callback):
-    def on_epoch_end(self, epoch, logs=None):
-        niter = (epoch + 1) * math.ceil(self.model.cfg.N / self.model.cfg.batch_size)
-        epsilon, delta = get_eps_delta(model=self.model, niter=niter)
-        print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
-        wandb.log({"epsilon": epsilon})
 
 
 class Global_DPGD_Mechanism(Mechanism):
@@ -104,21 +95,51 @@ class Local_DPGD_Mechanism(Mechanism):
         self.propagate_updates(rdp_global, type_of_update="RDP")
 
 
-def get_nm_coefs(model):
-    dict_coefs = {}
-    for layer in model.layers_forward_order():
-        assert isinstance(layer, DPLayer)
-        if layer.has_parameters():
-            assert len(layer.trainable_variables) == 1
-            dict_coefs[layer.trainable_variables[0].name] = layer.nm_coef
-    return dict_coefs
+class DP_Accountant(keras.callbacks.Callback):
+    """Callback to compute the DP guarantees at the end of each epoch.
+
+    Note: wandb is not a strict requirement for this callback to work, logging is also supported.
+
+    Attributes:
+        log_fn: log function to use. Takes a dictionary of (key, value) pairs as input.
+                if 'wandb', use wandb.log.
+                if 'logging', use logging.info.
+                if 'all', use both wandb.log and logging.info.
+    """
+
+    def __init__(self, log_fn="all"):
+        super().__init__()
+        if log_fn == "wandb":
+            import wandb
+
+            log_fn = wandb.log
+        elif log_fn == "logging":
+            import logging
+
+            log_fn = logging.info
+        elif log_fn == "all":
+            import wandb
+            import logging
+
+            log_fn = lambda x: [wandb.log(x), logging.info(x)]
+        self.log_fn = log_fn
+
+    def on_epoch_end(self, epoch, logs=None):
+        steps_per_epoch = math.ceil(self.model.cfg.N / self.model.cfg.batch_size)
+        niter = (epoch + 1) * steps_per_epoch
+        epsilon, delta = get_eps_delta(model=self.model, niter=niter)
+        print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
+        # plot epoch at the same time as epsilon and delta to ease comparison of plots in wandb API.
+        self.log_fn({"epsilon": epsilon, "delta": delta, "epoch": epoch + 1})
 
 
 def get_eps_delta(model, niter):
     prob = model.cfg.batch_size / model.cfg.N
-    # nm_coefs.values is seamingly in the right order :
+    # nm_coefs.values are in the right order because:
+    # since Python 3.6 dictionaries are ordered by insertion order - this is an implementation detail and not guaranteed by the language spec.
+    # since Python 3.7 dictionaries are ordered by insertion order - this is guaranteed by the language spec.
     if model.cfg.noisify_strategy == "local":
-        nm_coefs = get_nm_coefs(model)
+        nm_coefs = get_noise_multiplier_coefs(model)
         sigmas = [model.cfg.noise_multiplier * coef for coef in nm_coefs.values()]
         mech = Local_DPGD_Mechanism(
             prob=prob, sigmas=sigmas, delta=model.cfg.delta, niter=niter
@@ -133,11 +154,45 @@ def get_eps_delta(model, niter):
     return mech.epsilon, mech.delta
 
 
+def get_noise_multiplier_coefs(model):
+    """Get the noise multiplier coefficients of the model.
+
+    Args:
+        model: model to train.
+
+    Returns:
+        dict_coefs: dictionary of noise multiplier coefficients.
+                    The order of the coefficients is the same as
+                    the order of the layers returned by model.layers_forward_order().
+    """
+    dict_coefs = {}
+    for (
+        layer
+    ) in (
+        model.layers_forward_order()
+    ):  # remark: insertion order is preserved in Python 3.7+
+        assert isinstance(layer, DPLayer)
+        if layer.has_parameters():
+            assert len(layer.trainable_variables) == 1
+            dict_coefs[layer.trainable_variables[0].name] = layer.nm_coef
+    return dict_coefs
+
+
 def compute_gradient_bounds(model):
+    """Compute the gradient norm bounds of the model.
+
+    Args:
+        model: model to train.
+
+    Returns:
+        gradient_bounds: dictionary of gradient norm bounds with (key, value) pairs (layer_name, gradient_bound).
+                         The order of the bounds is the same as
+                         the order of the layers returned by model.layers_backward_order().
+    """
     # Initialisation, get lipschitz constant of loss
     input_bounds = {}
     gradient_bounds = {}
-    input_bound = model.X
+    input_bound = None  # Unknown at the start.
 
     # Forward pass to assess maximum activation norms
     for layer in model.layers_forward_order():
@@ -169,7 +224,20 @@ def compute_gradient_bounds(model):
 
 
 def local_noisify(model, gradient_bounds, trainable_vars, gradients):
-    nm_coefs = get_nm_coefs(model)
+    """Add noise to gradients of trainable variables.
+
+    Remark: this yields tighter bounds than global_noisify.
+
+    Args:
+        model: model to train.
+        gradient_bounds: dictionary of gradient norm upper bounds. Keys are trainable variables names.
+        trainable_vars: list of trainable variables. Same order as gradients.
+        gradients: list of gradients. Same order as trainable_vars.
+
+    Returns:
+        list of noisy gradients. Same order as trainable_vars.
+    """
+    nm_coefs = get_noise_multiplier_coefs(model)
     noises = []
     for grad, var in zip(gradients, trainable_vars):
         if var.name in gradient_bounds.keys():
@@ -196,6 +264,21 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
 
 
 def global_noisify(model, gradient_bounds, trainable_vars, gradients):
+    """Add noise to gradients.
+
+    Remark: a single global noise is added to all gradients, based on the global sensitivity.
+            This is the default behaviour of the original DPGD algorithm.
+            This may yield looser privacy bounds than local noisify.
+
+    Args:
+        model: model to train.
+        gradient_bounds: dictionary of gradient norm upper bounds. The keys are the names of the trainable variables.
+        trainable_vars: list of trainable variables. The list is in the same order as gradients.
+        gradients: list of gradients to add noise to. The list is in the same order as trainable_vars.
+
+    Returns:
+        noisy_grads: list of noisy gradients. The list is in the same order as trainable_vars.
+    """
     global_sensitivity = np.sqrt(
         sum([bound**2 for bound in gradient_bounds.values()])
     )
@@ -231,9 +314,8 @@ class DP_Sequential(deel.lip.model.Sequential):
     Hypothesis: The model is 1-Lipschitz and Dense layers are Gradient Norm Preserving.
     """
 
-    def __init__(self, *args, X, noisify_strategy, cfg, **kwargs):
+    def __init__(self, *args, noisify_strategy, cfg, **kwargs):
         super().__init__(*args, **kwargs)
-        self.X = X
         self.cfg = cfg
         if noisify_strategy == "global":
             self.noisify_fun = global_noisify
@@ -297,10 +379,9 @@ class DP_Model(deel.lip.model.Model):
     Hypothesis: The model is 1-Lipschitz and Dense layers are Gradient Norm Preserving.
     """
 
-    def __init__(self, dp_layers, *args, X, noisify_strategy, cfg, **kwargs):
+    def __init__(self, dp_layers, *args, noisify_strategy, cfg, **kwargs):
         super().__init__(*args, **kwargs)
         self.dp_layers = dp_layers
-        self.X = X
         self.cfg = cfg
         if noisify_strategy == "global":
             self.noisify_fun = global_noisify
