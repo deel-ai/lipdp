@@ -24,7 +24,6 @@ import math
 
 import numpy as np
 import tensorflow as tf
-
 from autodp import mechanism_zoo
 from autodp import transformer_zoo
 from autodp.autodp_core import Mechanism
@@ -42,6 +41,7 @@ class DP_Accountant(keras.callbacks.Callback):
         epsilon, delta = get_eps_delta(model=self.model, niter=niter)
         print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
         wandb.log({"epsilon": epsilon})
+
 
 class Global_DPGD_Mechanism(Mechanism):
     def __init__(self, prob, sigma, niter, delta, name="Layer_DPGD"):
@@ -168,18 +168,8 @@ def compute_gradient_bounds(model):
     return gradient_bounds
 
 
-def get_noise_multiplier_coefs(model):
-    dict = {}
-    for layer in model.layers[::-1]:
-        if isinstance(layer, DPLayer):
-            if layer.has_parameters():
-                assert len(layer.trainable_variables) == 1
-                dict[layer.trainable_variables[0].name] = layer.nm_coef
-    return dict
-
-
 def local_noisify(model, gradient_bounds, trainable_vars, gradients):
-    nm_coefs = get_noise_multiplier_coefs(model)
+    nm_coefs = get_nm_coefs(model)
     noises = []
     for grad, var in zip(gradients, trainable_vars):
         if var.name in gradient_bounds.keys():
@@ -190,7 +180,7 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
             )
             noises.append(tf.random.normal(shape=grad.shape, stddev=stddev))
             if model.cfg.run_eagerly:
-                upperboundgrad = gradient_bounds[var.name] * np.sqrt(model.cfg.batch_size)
+                upperboundgrad = gradient_bounds[var.name] * model.cfg.batch_size
                 noise_msg = (
                     f"Adding noise of stddev : {stddev}"
                     f" to variable {var.name}"
@@ -213,7 +203,7 @@ def global_noisify(model, gradient_bounds, trainable_vars, gradients):
     noises = [tf.random.normal(shape=g.shape, stddev=stddev) for g in gradients]
     if model.cfg.run_eagerly:
         for grad, var in zip(gradients, trainable_vars):
-            upperboundgrad = gradient_bounds[var.name] * np.sqrt(model.cfg.batch_size)
+            upperboundgrad = gradient_bounds[var.name] * model.cfg.batch_size
             noise_msg = (
                 f"Adding noise of stddev : {stddev}"
                 f" to variable {var.name}"
