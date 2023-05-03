@@ -67,6 +67,7 @@ cfg.epsilon = 0.0
 cfg.hidden_size = 128
 cfg.input_clipping = 0.2
 cfg.K = 0.99
+cfg.layer_centering = True
 cfg.learning_rate = 1e-3
 cfg.lip_coef = 1.0
 cfg.log_wandb = "disabled"
