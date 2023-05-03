@@ -29,7 +29,10 @@ def get_sweep_config(cfg):
         "method": "bayes",
         "name": "default",
         "metric": {"goal": "maximize", "name": "val_accuracy"},
-        "early_terminate": {"type": "hyperband", "min_iter": 10, "eta": 2},
+        # "early_terminate": {"type": "hyperband", "min_iter": 10, "eta": 2},
+        # maybe a bit dangerous to use with automatic tuning of the number of epochs?
+        # ideally we would want the early stopping to happen on "epsilon" and not on the number of steps.
+        # otherwise the runs with hundred of epochs will be early stopped despite having small values of epsilon.
     }
 
     common_hyper_parameters = {
