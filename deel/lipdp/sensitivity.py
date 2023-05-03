@@ -20,8 +20,68 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import math
+
 import numpy as np
 import tensorflow as tf
+
+from deel.lipdp.model import get_eps_delta
+
+
+def get_max_epochs(epsilon_max, model, epochs_max=1024):
+    """Return the maximum number of epochs to reach a given epsilon_max value.
+
+    The computation of (epsilon, delta) is slow since it involves solving a minimization problem
+    (mandatory to go from RDP accountant to DP results). Hence each call takes typically around 1s.
+    This function is used to avoid calling get_eps_delta too many times be leveraging the fact that
+    epsilon is a non-decreasing function of the number of epochs: we unlocks the dichotomy search.
+
+    Hence the number of calls is typically log2(epochs_max) + 1.
+    The maximum of epochs is set to 1024 by default to avoid too long computation times, even in high
+    privacy regimes.
+
+    Args:
+        epsilon_max: The maximum value of epsilon we want to reach.
+        model: The model used to compute the values of epsilon.
+        epochs_max: The maximum number of epochs to reach epsilon_max. Defaults to 1024.
+                    If None, the dichotomy search is used to find the upper bound.
+
+    Returns:
+        The maximum number of epochs to reach epsilon_max."""
+    steps_per_epoch = math.ceil(model.cfg.N / model.cfg.batch_size)
+
+    def fun(epoch):
+        if epoch == 0:
+            epsilon = 0
+        else:
+            epoch = round(epoch)
+            niter = (epoch + 1) * steps_per_epoch
+            epsilon, _ = get_eps_delta(model, niter)
+        return epsilon
+
+    # dichotomy search on the number of epochs.
+    if epochs_max is None:
+        epochs_max = 512
+        epsilon = 0
+        while epsilon < epsilon_max:
+            epochs_max *= 2
+            epsilon = fun(epochs_max)
+            print(f"epochs_max = {epochs_max} at epsilon = {epsilon}")
+
+    epochs_min = 0
+
+    while epochs_max - epochs_min > 1:
+        epoch = (epochs_max + epochs_min) / 2
+        epsilon = fun(epoch)
+        if epsilon < epsilon_max:
+            epochs_min = epoch
+        else:
+            epochs_max = epoch
+        print(
+            f"epoch bounds = {epochs_min, epochs_max} and epsilon = {epsilon} at epoch {epoch}"
+        )
+
+    return int(round(epoch))
 
 
 def gradient_norm_check(K_list, model, examples):

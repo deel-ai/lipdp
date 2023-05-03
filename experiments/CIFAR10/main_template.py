@@ -50,6 +50,7 @@ from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_cifar
+from deel.lipdp.sensitivity import get_max_epochs
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
 
 cfg = config_dict.ConfigDict()
@@ -57,13 +58,11 @@ cfg = config_dict.ConfigDict()
 cfg.add_biases = True
 cfg.alpha = 50.0
 cfg.architecture = "VGG"
-cfg.beta_1 = 0.9
-cfg.beta_2 = 0.999
 cfg.batch_size = 2_048
 cfg.clip_loss_gradient = 1e-4
 cfg.condense = True
 cfg.delta = 1e-5
-cfg.epsilon = 0.0
+cfg.epsilon_max = 10.0
 cfg.hidden_size = 128
 cfg.input_clipping = 0.2
 cfg.K = 0.99
@@ -87,7 +86,6 @@ cfg.representation = "HSV"
 cfg.run_eagerly = False
 cfg.save = False
 cfg.save_folder = os.getcwd()
-cfg.steps = math.ceil(cfg.N / cfg.batch_size) * 40
 cfg.skip_connections = True
 cfg.sweep_id = ""
 cfg.tau = 1.0
@@ -113,18 +111,13 @@ def compile_model(model, cfg):
     if cfg.optimizer == "SGD":
         optimizer = tf.keras.optimizers.SGD(learning_rate=cfg.learning_rate)
     elif cfg.optimizer == "Adam":
-        optimizer = tf.keras.optimizers.Adam(
-            learning_rate=cfg.learning_rate,
-            beta_1=cfg.beta_1,
-            beta_2=cfg.beta_2,
-            epsilon=1e-12,
-        )
+        optimizer = tf.keras.optimizers.Adam(learning_rate=cfg.learning_rate)
     else:
         print("Illegal optimizer argument : ", cfg.optimizer)
     # Choice of loss function
     if cfg.loss == "MulticlassHKR":
         if cfg.optimizer == "SGD":
-            cfg.learning_rate = cfg.learning_rate / cfg.alpha
+            cfg.learning_rate = cfg.learning_rate / (1 + cfg.alpha)
         loss = MulticlassHKR(
             alpha=cfg.alpha,
             min_margin=cfg.min_margin,
@@ -180,12 +173,10 @@ def init_wandb():
 def train():
     init_wandb()
 
-    num_epochs = math.ceil(cfg.steps / math.ceil(cfg.N / cfg.batch_size))
-    # cfg.noise_multiplier = compute_noise(cfg.N,cfg.batch_size,cfg.epsilon,num_epochs,cfg.delta,1e-6)
-
     x_train, x_test, y_train, y_test, upper_bound = load_data_cifar(cfg)
     model = create_model(cfg, upper_bound)
     model = compile_model(model, cfg)
+    num_epochs = get_max_epochs(cfg.epsilon_max, model)
     model.summary()
     callbacks = [
         WandbCallback(save_model=False, monitor="val_accuracy"),

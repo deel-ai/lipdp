@@ -51,4 +51,8 @@ from deel.lipdp.pipeline import (
     load_data_mnist,
     load_data_fashion_mnist,
 )
-from deel.lipdp.sensitivity import gradient_norm_check, check_layer_gradient_norm
+from deel.lipdp.sensitivity import (
+    get_max_epochs,
+    gradient_norm_check,
+    check_layer_gradient_norm,
+)

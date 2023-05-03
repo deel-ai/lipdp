@@ -51,20 +51,20 @@ from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_mnist
+from deel.lipdp.sensitivity import get_max_epochs
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
+
 
 cfg = config_dict.ConfigDict()
 
 cfg.add_biases = True
 cfg.alpha = 50.0
 cfg.architecture = "ConvNet"
-cfg.beta_1 = 0.9
-cfg.beta_2 = 0.999
 cfg.batch_size = 8_192
 cfg.condense = True
 cfg.clip_loss_gradient = 0.0001
 cfg.delta = 1e-5
-cfg.epsilon = 0.0
+cfg.epsilon_max = 3.0
 cfg.input_clipping = 0.7
 cfg.K = 0.99
 cfg.learning_rate = 1e-2
@@ -83,7 +83,6 @@ cfg.opt_iterations = 10
 cfg.run_eagerly = False
 cfg.save = False
 cfg.save_folder = os.getcwd()
-cfg.steps = 1000
 cfg.sweep_id = ""
 cfg.tau = 1.0
 cfg.tag = "Default"
@@ -106,12 +105,7 @@ def compile_model(model, cfg):
     if cfg.optimizer == "SGD":
         optimizer = tf.keras.optimizers.SGD(learning_rate=cfg.learning_rate)
     elif cfg.optimizer == "Adam":
-        optimizer = tf.keras.optimizers.Adam(
-            learning_rate=cfg.learning_rate,
-            beta_1=cfg.beta_1,
-            beta_2=cfg.beta_2,
-            epsilon=1e-12,
-        )
+        optimizer = tf.keras.optimizers.Adam(learning_rate=cfg.learning_rate)
     else:
         print("Illegal optimizer argument : ", cfg.optimizer)
     # Choice of loss function
@@ -173,8 +167,7 @@ def train():
     model = create_model(cfg, upper_bound)
     model = compile_model(model, cfg)
     model.summary()
-    steps_per_epoch = math.ceil(cfg.N / cfg.batch_size)
-    num_epochs = math.ceil(cfg.steps / steps_per_epoch)
+    num_epochs = get_max_epochs(cfg.epsilon_max, model)
     callbacks = [
         WandbCallback(save_model=False, monitor="val_accuracy"),
         EarlyStopping(monitor="val_accuracy", min_delta=0.001, patience=15),
