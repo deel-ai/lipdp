@@ -108,7 +108,7 @@ def create_MLP_Mixer(cfg, upper_bound):
 
 
 def create_VGG(cfg, upper_bound):
-    all_layers = [
+    layers = [
         DP_BoundedInput(input_shape=(32, 32, 3), upper_bound=upper_bound),
         DP_SpectralConv2D(
             filters=64,
@@ -146,20 +146,20 @@ def create_VGG(cfg, upper_bound):
         DP_LayerCentering(),
         DP_SpectralDense(512, use_bias=False),
         DP_AddBias(norm_max=1),
+        DP_GroupSort(2),
         DP_SpectralDense(10, use_bias=False),
         DP_AddBias(norm_max=1),
         DP_ClipGradient(cfg.clip_loss_gradient),
     ]
-    if not cfg.add_biases:
-        model = DP_Sequential(
-            [layer for layer in all_layers if not isinstance(layer, DP_AddBias)],
-            cfg=cfg,
-            noisify_strategy=cfg.noisify_strategy,
-        )
-    elif cfg.add_biases:
-        model = DP_Sequential(
-            all_layers,
-            cfg=cfg,
-            noisify_strategy=cfg.noisify_strategy,
-        )
+
+    if cfg.add_biases is False:
+        layers = [layer for layer in layers if not isinstance(layer, DP_AddBias)]
+    if cfg.layer_centering is False:
+        layers = [layer for layer in layers if not isinstance(layer, DP_LayerCentering)]
+
+    model = DP_Sequential(
+        layers,
+        cfg=cfg,
+        noisify_strategy=cfg.noisify_strategy,
+    )
     return model
