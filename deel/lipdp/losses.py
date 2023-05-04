@@ -22,35 +22,29 @@
 # SOFTWARE.
 import math
 
-import numpy as np
 import tensorflow as tf
-from tensorflow.python.keras.losses import LossFunctionWrapper
+from tensorflow.python.keras.losses import Loss
 
 
-@tf.function
-def k_cosine_similarity(y_true, y_pred, KX, axis=-1):
-    # Cast all values to similar type :
-    y_pred = tf.cast(y_pred, dtype=tf.float32)
-    y_true = tf.cast(y_true, dtype=tf.float32)
-    KX = tf.cast(KX, dtype=tf.float32)
-    # Get minimum value between theoretical and practical value. (TO CHECK)
-    factor = tf.where(tf.norm(y_pred) < KX, KX, tf.norm(y_pred))
-    y_pred = y_pred / factor
-    # Compute and return cosine similarity.
-    return -tf.reduce_sum(y_true * y_pred, axis=axis)
-
-
-class KCosineSimilarity(LossFunctionWrapper):
+class KCosineSimilarity(Loss):
     def __init__(
         self,
-        KX,
+        K=1.0,
         axis=-1,
         reduction=tf.keras.losses.Reduction.AUTO,
         name="cosine_similarity",
     ):
-        super().__init__(
-            k_cosine_similarity, KX=KX, reduction=reduction, name=name, axis=axis
-        )
+        super().__init__(reduction=reduction, name=name)
+        # as the espilon is applied before the sqrt in tf.linalg.l2_normalize we
+        # apply square to it
+        self.K = K ** 2
+        self.axis = axis
+
+    @tf.function
+    def call(self, y_true, y_pred):
+        y_true = tf.linalg.l2_normalize(y_true, epsilon=self.K, axis=self.axis)
+        y_pred = tf.linalg.l2_normalize(y_pred, epsilon=self.K, axis=self.axis)
+        return -tf.reduce_sum(y_true * y_pred, axis=self.axis)
 
 
 # FIRST TRY : TO DEBUG
@@ -75,7 +69,7 @@ def get_lip_constant_loss(cfg, input_bound):
     elif cfg.loss == "TauCategoricalCrossentropy":
         L = math.sqrt(2)
     elif cfg.loss == "KCosineSimilarity":
-        L = 1 / float(cfg.K * cfg.min_norm)
+        L = 1 / float(cfg.K)
     else:
         raise TypeError(f"Unrecognised Loss Function Argument {cfg.loss}")
     return L / cfg.batch_size

@@ -20,35 +20,26 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import math
 import os
 
 import numpy as np
-import pandas as pd
 import tensorflow as tf
 import wandb
 from absl import app
-from absl import flags
+from deel.lip.losses import MulticlassHKR
+from deel.lip.losses import MulticlassHinge
+from deel.lip.losses import MulticlassKR
+from deel.lip.losses import TauCategoricalCrossentropy
 from ml_collections import config_dict
 from ml_collections import config_flags
 from models_CIFAR import create_MLP_Mixer
 from models_CIFAR import create_VGG
-from tensorflow import keras
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
-from tensorflow.keras.layers import Flatten
-from tensorflow.keras.layers import Input
 from wandb.keras import WandbCallback
 
-from deel.lip.activations import GroupSort
-from deel.lip.losses import MulticlassHinge
-from deel.lip.losses import MulticlassHKR
-from deel.lip.losses import MulticlassKR
-from deel.lip.losses import TauCategoricalCrossentropy
-from deel.lipdp.losses import get_lip_constant_loss
 from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
-from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_cifar
 from deel.lipdp.sensitivity import get_max_epochs
 from wandb_sweeps.src_config.sweep_config import get_sweep_config
@@ -136,9 +127,9 @@ def compile_model(model, cfg):
             cfg.tau, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
     elif cfg.loss == "KCosineSimilarity":
-        KX_min = cfg.K * cfg.min_norm
+        K_min = cfg.K
         loss = KCosineSimilarity(
-            KX_min, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
+            K_min, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
     elif cfg.loss == "MAE":
         loss = tf.keras.losses.MeanAbsoluteError(
