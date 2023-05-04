@@ -79,7 +79,10 @@ class Local_DPGD_Mechanism(Mechanism):
         # Accountant composition of subsampling processes
         subsample = transformer_zoo.AmplificationBySampling()
         SubsampledGaussian_mech = subsample(
-            composed_layers, prob, improved_bound_flag=True
+            # improved_bound_flag can be set to True for Gaussian mechanisms (see autodp documentation).
+            composed_layers,
+            prob,
+            improved_bound_flag=True,
         )
 
         # Accounting for niter iterations
@@ -245,6 +248,7 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
                 model.cfg.noise_multiplier
                 * gradient_bounds[var.name]
                 * nm_coefs[var.name]
+                * 2
             )
             noises.append(tf.random.normal(shape=tf.shape(grad), stddev=stddev))
             if model.cfg.run_eagerly:

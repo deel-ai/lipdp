@@ -44,7 +44,7 @@ from deel.lipdp.layers import (
     DPLayer,
     make_residuals,
 )
-from deel.lipdp.losses import KCosineSimilarity, k_cosine_similarity
+from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Model, DP_Sequential, DP_Accountant
 from deel.lipdp.pipeline import (
     load_data_cifar,

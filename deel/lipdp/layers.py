@@ -402,7 +402,13 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
         self.clip_value = clip_value
 
     def call(self, inputs, *args, **kwargs):
-        return clip_gradient(inputs, self.clip_value)
+        batch_size = tf.cast(tf.shape(inputs)[0], tf.float32)
+        # the clipping is done elementwise
+        # since REDUCTION=SUM_OVER_BATCH_SIZE, we need to divide by batch_size
+        # to get the correct norm.
+        # this makes the clipping independent of the batch size.
+        elementwise_clip_value = self.clip_value / batch_size
+        return clip_gradient(inputs, elementwise_clip_value)
 
     def backpropagate_params(self, input_bound, gradient_bound):
         raise ValueError("ClipGradient doesn't have parameters")
