@@ -105,6 +105,7 @@ def DP_GNP_Factory(layer_cls):
         def has_parameters(self):
             return False
 
+    DP_GNP.__name__ = f"DP_{layer_cls.__name__}"
     return DP_GNP
 
 
