@@ -20,9 +20,89 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import os
+from typing import Callable
+
+import wandb
+import yaml
+from ml_collections.config_dict import ConfigDict
 
 
-def get_sweep_config(cfg):
+def init_wandb(cfg: ConfigDict, project: str):
+    if cfg.log_wandb == "run":
+        wandb.init(project=project, mode="online", config=cfg)
+
+    elif cfg.log_wandb == "disabled":
+        wandb.init(project=project, mode="disabled", config=cfg)
+
+    elif cfg.log_wandb.startswith("sweep_"):
+        wandb.init()
+        for key, value in wandb.config.items():
+            cfg[key] = value
+
+
+def run_with_wandb(cfg: ConfigDict, train_function: Callable, project: str):
+    """Run an individual run or a sweep.
+    """
+    wandb.login()
+    # indivudal run
+    if cfg.log_wandb in ["run", "disabled"]:
+        train_function()
+    # run sweep
+    elif cfg.log_wandb.startswith("sweep_"):
+        if cfg.sweep_id == "":
+            if cfg.sweep_yaml_config != "":
+                # load yaml config
+                assert os.path.exists(cfg.sweep_yaml_config)
+                sweep_config = _get_sweep_config_from_yaml(cfg)
+            else:
+                # default sweep config
+                sweep_config = _get_default_sweep_config(cfg)
+            sweep_id = wandb.sweep(sweep=sweep_config, project=project)
+        else:
+            sweep_id = cfg.sweep_id
+        wandb.agent(sweep_id, function=train_function, project=project,
+                    count=cfg.opt_iterations)
+
+
+def _sanitize_sweep_config_from_cfg(
+    sweep_config: dict, cfg: ConfigDict
+) -> dict:
+    """
+    Name the sweep config and add default values for unspecified parameters.
+    """
+    # sweep name
+    sweep_name = cfg.log_wandb[len("sweep_") :]
+    sweep_config["name"] = sweep_name
+    # get unspecified params from cfg
+    for key, value in cfg.items():
+        if key not in sweep_config["parameters"]:
+            if key == "loss":
+                print("Loss : ", value)
+            sweep_config["parameters"][key] = {
+                "value": value,
+                "distribution": "constant",
+            }
+    return sweep_config
+
+
+def _get_sweep_config_from_yaml(cfg):
+    """
+    Load sweep config from yaml file.
+    """
+    # load sweep config from yaml
+    with open(cfg.sweep_yaml_config, "r") as f:
+        sweep_config = yaml.safe_load(f)
+
+    # complete sweep config with unspecified cfg constant params
+    sweep_config = _sanitize_sweep_config_from_cfg(sweep_config, cfg)
+    return sweep_config
+
+
+def _get_default_sweep_config(cfg):
+    """
+    Get default sweep config.
+    """
     # Define pertinent parameters according to config :
 
     header_to_all_sweeps = {
@@ -122,16 +202,6 @@ def get_sweep_config(cfg):
         },
     }
 
-    # Handle sweep
-    sweep_name = cfg.log_wandb[len("sweep_") :]
-    sweep_config["name"] = sweep_name
-    for key, value in cfg.items():
-        if key not in sweep_config["parameters"]:
-            if key == "loss":
-                print("Loss : ", value)
-            sweep_config["parameters"][key] = {
-                "value": value,
-                "distribution": "constant",
-            }
-    # Return the config of sweep :
+    # complete sweep config with unspecified cfg constant params
+    sweep_config = _sanitize_sweep_config_from_cfg(sweep_config, cfg)
     return sweep_config

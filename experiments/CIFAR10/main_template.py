@@ -22,6 +22,7 @@
 # SOFTWARE.
 import os
 
+import yaml
 import numpy as np
 import tensorflow as tf
 import wandb
@@ -32,8 +33,8 @@ from deel.lip.losses import MulticlassKR
 from deel.lip.losses import TauCategoricalCrossentropy
 from ml_collections import config_dict
 from ml_collections import config_flags
-from models_CIFAR import create_MLP_Mixer
-from models_CIFAR import create_VGG
+from .models_CIFAR import create_MLP_Mixer
+from .models_CIFAR import create_VGG
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from wandb.keras import WandbCallback
@@ -42,7 +43,7 @@ from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.pipeline import load_data_cifar
 from deel.lipdp.sensitivity import get_max_epochs
-from wandb_sweeps.src_config.sweep_config import get_sweep_config
+from wandb_sweeps.src_config.wandb_utils import init_wandb, run_with_wandb
 
 cfg = config_dict.ConfigDict()
 
@@ -76,6 +77,7 @@ cfg.num_classes = 10
 cfg.opt_iterations = 10
 cfg.representation = "HSV"
 cfg.run_eagerly = False
+cfg.sweep_yaml_config = ""
 cfg.save = False
 cfg.save_folder = os.getcwd()
 cfg.skip_connections = True
@@ -148,22 +150,8 @@ def compile_model(model, cfg):
     )
     return model
 
-
-def init_wandb():
-    if cfg.log_wandb == "run":
-        wandb.init(project="dp-lipschitz_CIFAR10", mode="online", config=cfg)
-
-    elif cfg.log_wandb == "disabled":
-        wandb.init(project="dp-lipschitz_CIFAR10", mode="disabled", config=cfg)
-
-    elif cfg.log_wandb.startswith("sweep_"):
-        wandb.init()
-        for key, value in wandb.config.items():
-            cfg[key] = value
-
-
 def train():
-    init_wandb()
+    init_wandb(cfg=cfg, project="dp-lipschitz_CIFAR10")
 
     x_train, x_test, y_train, y_test, upper_bound = load_data_cifar(cfg)
     model = create_model(cfg, upper_bound)
@@ -205,17 +193,7 @@ def train():
 
 
 def main(_):
-    wandb.login()
-    if cfg.log_wandb in ["run", "disabled"]:
-        train()
-    elif cfg.log_wandb.startswith("sweep_"):
-        if cfg.sweep_id == "":
-            sweep_config = get_sweep_config(cfg)
-            sweep_id = wandb.sweep(sweep=sweep_config, project="dp-lipschitz_CIFAR10")
-        else:
-            sweep_id = cfg.sweep_id
-        wandb.agent(sweep_id, function=train, count=cfg.opt_iterations)
-
+    run_with_wandb(cfg=cfg, train_function=train, project="dp-lipschitz_CIFAR10")
 
 if __name__ == "__main__":
     app.run(main)
