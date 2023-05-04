@@ -20,6 +20,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import collections
+
 import tensorflow as tf
 
 from deel.lipdp.layers import DP_AddBias
@@ -225,4 +227,137 @@ def VGG_factory(cfg, depth_conv, depth_fc, init_filters, upper_bound):
         cfg=cfg,
         noisify_strategy=cfg.noisify_strategy,
     )
+    return model
+
+# -------------------------------------------------------------------------
+# ResNet
+# -------------------------------------------------------------------------
+ModelParams = collections.namedtuple(
+    'ModelParams',
+    ['repetitions', 'init_filters'])
+
+RESNET_MODELS_DICT = {
+    'resnet6a_small': ModelParams((2,), 32),
+    'resnet6a_large': ModelParams((2,), 64),
+    'resnet6b_small': ModelParams((1, 1,), 32),
+    'resnet6b_large': ModelParams((1, 1,), 32),
+    'resnet8_small': ModelParams((1, 1, 1), 32),
+    'resnet8_large': ModelParams((1, 1, 1), 64),
+    'resnet10_small': ModelParams((2, 2), 32),
+    'resnet10_large': ModelParams((2, 2), 64),
+}
+
+# Helper function
+def handle_block_names(stage, block):
+    name_base = 'stage{}_unit{}_'.format(stage + 1, block + 1)
+    conv_name = name_base + 'spconv'
+    lc_name = name_base + 'lc'
+    gs_name = name_base + 'gs'
+    pool_name = name_base + 'pool'
+    return conv_name, lc_name, gs_name, pool_name
+
+# Residual block
+def residual_conv_block(filters, stage, block):
+    # get params and names of layers
+    conv_name, lc_name, gs_name, pool_name = handle_block_names(stage, block)
+
+    layers = []
+    to_add = []
+
+    # first block: pool (except block 0) + additional conv (-> filters)
+    if block == 0:
+        if stage != 0:
+            layers += [
+                DP_ScaledL2NormPooling2D(pool_size=2, strides=2, name=pool_name + "1")
+            ]
+
+        layers += [
+            DP_SpectralConv2D(
+                filters=filters,
+                kernel_size=(1, 1),
+                kernel_initializer="orthogonal",
+                strides=(1, 1),
+                use_bias=False,
+                name=conv_name + "0"
+            )
+        ]
+
+    # continue with convolution layers
+    to_add += [
+        DP_LayerCentering(name=lc_name + "1"),
+        DP_GroupSort(2, name=gs_name + "1"),
+        DP_SpectralConv2D(
+            filters=filters,
+            kernel_size=(3, 3),
+            kernel_initializer="orthogonal",
+            strides=(1, 1),
+            use_bias=False,
+            name=conv_name + "1"
+        ),
+        DP_LayerCentering(name=lc_name + "2"),
+        DP_GroupSort(2, name=gs_name + "2"),
+        DP_SpectralConv2D(
+            filters=filters,
+            kernel_size=(3, 3),
+            kernel_initializer="orthogonal",
+            strides=(1, 1),
+            use_bias=False,
+            name=conv_name + "2"
+        )
+    ]
+
+    # add residual connection
+    layers += make_residuals("1-lip-add", to_add)
+    return layers
+
+# ResNet Builder
+def create_ResNet(cfg, upper_bound):
+    model_params = RESNET_MODELS_DICT[cfg.architecture]
+
+    # CIFAR10
+    classes = 10
+    input_shape = (32, 32, 3)
+    layers = [
+        DP_BoundedInput(input_shape=input_shape, name="data", upper_bound=upper_bound)
+    ]
+
+    # get parameters for model layers
+    init_filters = model_params.init_filters
+
+    # resnet bottom
+    layers += [
+        # set stride 2 in pooling instead of conv
+        DP_SpectralConv2D(
+            filters=init_filters,
+            kernel_size=(3, 3),
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,
+            name="conv0"
+        ),
+        DP_ScaledL2NormPooling2D(pool_size=2, strides=2, name="pool0"),
+        DP_LayerCentering(name="lc0"),
+        DP_GroupSort(2, name="gs0"),
+    ]
+
+    # resnet body
+    for stage, rep in enumerate(model_params.repetitions):
+        for block in range(rep):
+            filters = init_filters * (2 ** stage)
+            layers += residual_conv_block(filters, stage, block)
+
+    # resnet top
+    layers += [
+        DP_ScaledGlobalL2NormPooling2D(name="globalpool1"),
+        DP_SpectralDense(classes, use_bias=False, name="fc1"),
+        DP_ClipGradient(cfg.clip_loss_gradient, name="clipgrad")
+    ]
+
+    model = DP_Model(
+        layers,
+        cfg=cfg,
+        noisify_strategy=cfg.noisify_strategy,
+        name=cfg.architecture
+    )
+    model.build(input_shape=(None, *input_shape))
     return model
