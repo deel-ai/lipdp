@@ -8,6 +8,7 @@ __pycache__
 .vscode
 .tox
 lipdp_dev_env
+*wandb
 
 # Files generated:
 logs
