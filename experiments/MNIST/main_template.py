@@ -23,6 +23,7 @@
 import math
 import os
 
+import yaml
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -31,8 +32,8 @@ from absl import app
 from absl import flags
 from ml_collections import config_dict
 from ml_collections import config_flags
-from models_MNIST import create_ConvNet
-from models_MNIST import create_Dense_Model
+from .models_MNIST import create_ConvNet
+from .models_MNIST import create_Dense_Model
 from tensorflow import keras
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
@@ -52,7 +53,7 @@ from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_mnist
 from deel.lipdp.sensitivity import get_max_epochs
-from wandb_sweeps.src_config.sweep_config import get_sweep_config
+from wandb_sweeps.src_config.wandb_utils import init_wandb, run_with_wandb
 
 
 cfg = config_dict.ConfigDict()
@@ -81,6 +82,7 @@ cfg.N = 50_000
 cfg.num_classes = 10
 cfg.opt_iterations = 10
 cfg.run_eagerly = False
+cfg.sweep_yaml_config = ""
 cfg.save = False
 cfg.save_folder = os.getcwd()
 cfg.sweep_id = ""
@@ -152,16 +154,7 @@ def compile_model(model, cfg):
 
 
 def train():
-    if cfg.log_wandb == "run":
-        wandb.init(project="MNIST_ClipLess_SGD", mode="online", config=cfg)
-
-    elif cfg.log_wandb == "disabled":
-        wandb.init(project="MNIST_ClipLess_SGD", mode="disabled", config=cfg)
-
-    elif cfg.log_wandb.startswith("sweep_"):
-        wandb.init()
-        for key, value in wandb.config.items():
-            cfg[key] = value
+    init_wandb(cfg=cfg, project="MNIST_ClipLess_SGD")
 
     x_train, x_test, y_train, y_test, upper_bound = load_data_mnist(cfg)
     model = create_model(cfg, upper_bound)
@@ -203,17 +196,7 @@ def train():
 
 
 def main(_):
-    wandb.login()
-    if cfg.log_wandb in ["run", "disabled"]:
-        train()
-    elif cfg.log_wandb.startswith("sweep_"):
-        if cfg.sweep_id == "":
-            sweep_config = get_sweep_config(cfg)
-            sweep_id = wandb.sweep(sweep=sweep_config, project="MNIST_ClipLess_SGD")
-        else:
-            sweep_id = cfg.sweep_id
-        wandb.agent(sweep_id, function=train, count=cfg.opt_iterations)
-
+    run_with_wandb(cfg=cfg, train_function=train, project="MNIST_ClipLess_SGD")
 
 if __name__ == "__main__":
     app.run(main)
