@@ -23,25 +23,23 @@
 import math
 import os
 
-import yaml
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import wandb
+import yaml
 from absl import app
 from absl import flags
 from ml_collections import config_dict
 from ml_collections import config_flags
-from .models_MNIST import create_ConvNet
-from .models_MNIST import create_Dense_Model
 from tensorflow import keras
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Input
-from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 
+import wandb
+from .models_MNIST import create_ConvNet
+from .models_MNIST import create_Dense_Model
 from deel.lip.activations import GroupSort
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
@@ -53,7 +51,10 @@ from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.pipeline import load_data_mnist
 from deel.lipdp.sensitivity import get_max_epochs
-from wandb_sweeps.src_config.wandb_utils import init_wandb, run_with_wandb
+from wandb.keras import WandbCallback
+from wandb.keras import WandbMetricsLogger
+from wandb_sweeps.src_config.wandb_utils import init_wandb
+from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
 
 cfg = config_dict.ConfigDict()
@@ -63,7 +64,7 @@ cfg.alpha = 50.0
 cfg.architecture = "ConvNet"
 cfg.batch_size = 8_192
 cfg.condense = True
-cfg.clip_loss_gradient = 0.0001
+cfg.clip_loss_gradient = 1.0
 cfg.delta = 1e-5
 cfg.epsilon_max = 3.0
 cfg.input_clipping = 0.7
@@ -76,7 +77,7 @@ cfg.min_margin = 0.5
 cfg.min_norm = 5.21
 cfg.model_name = "No_name"
 cfg.noise_multiplier = 5.0
-cfg.noisify_strategy = "global"
+cfg.noisify_strategy = "local"
 cfg.optimizer = "Adam"
 cfg.N = 50_000
 cfg.num_classes = 10
@@ -197,6 +198,7 @@ def train():
 
 def main(_):
     run_with_wandb(cfg=cfg, train_function=train, project="MNIST_ClipLess_SGD")
+
 
 if __name__ == "__main__":
     app.run(main)

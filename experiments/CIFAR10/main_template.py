@@ -22,28 +22,29 @@
 # SOFTWARE.
 import os
 
-import yaml
 import numpy as np
 import tensorflow as tf
-import wandb
+import yaml
 from absl import app
-from deel.lip.losses import MulticlassHKR
-from deel.lip.losses import MulticlassHinge
-from deel.lip.losses import MulticlassKR
-from deel.lip.losses import TauCategoricalCrossentropy
 from ml_collections import config_dict
 from ml_collections import config_flags
-from .models_CIFAR import create_MLP_Mixer
-from .models_CIFAR import create_VGG
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
-from wandb.keras import WandbCallback
 
+import wandb
+from .models_CIFAR import create_MLP_Mixer
+from .models_CIFAR import create_VGG
+from deel.lip.losses import MulticlassHinge
+from deel.lip.losses import MulticlassHKR
+from deel.lip.losses import MulticlassKR
+from deel.lip.losses import TauCategoricalCrossentropy
 from deel.lipdp.losses import KCosineSimilarity
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.pipeline import load_data_cifar
 from deel.lipdp.sensitivity import get_max_epochs
-from wandb_sweeps.src_config.wandb_utils import init_wandb, run_with_wandb
+from wandb.keras import WandbCallback
+from wandb_sweeps.src_config.wandb_utils import init_wandb
+from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
 cfg = config_dict.ConfigDict()
 
@@ -51,7 +52,7 @@ cfg.add_biases = True
 cfg.alpha = 50.0
 cfg.architecture = "VGG"
 cfg.batch_size = 2_048
-cfg.clip_loss_gradient = 1e-4
+cfg.clip_loss_gradient = 0.2
 cfg.condense = True
 cfg.delta = 1e-5
 cfg.epsilon_max = 10.0
@@ -68,7 +69,7 @@ cfg.mlp_channel_dim = 128
 cfg.mlp_seq_dim = 128
 cfg.model_name = "CIFAR10"
 cfg.noise_multiplier = 5.0
-cfg.noisify_strategy = "global"
+cfg.noisify_strategy = "local"
 cfg.num_mixer_layers = 2
 cfg.optimizer = "Adam"
 cfg.patch_size = 2
@@ -150,6 +151,7 @@ def compile_model(model, cfg):
     )
     return model
 
+
 def train():
     init_wandb(cfg=cfg, project="dp-lipschitz_CIFAR10")
 
@@ -194,6 +196,7 @@ def train():
 
 def main(_):
     run_with_wandb(cfg=cfg, train_function=train, project="dp-lipschitz_CIFAR10")
+
 
 if __name__ == "__main__":
     app.run(main)
