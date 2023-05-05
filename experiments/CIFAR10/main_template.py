@@ -50,7 +50,7 @@ cfg = config_dict.ConfigDict()
 
 cfg.add_biases = True
 cfg.alpha = 50.0
-cfg.architecture = "VGG"
+cfg.architecture = "VGG5_small"
 cfg.batch_size = 2_048
 cfg.clip_loss_gradient = 0.2
 cfg.condense = True
@@ -94,7 +94,7 @@ _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 def create_model(cfg, upper_bound):
     if cfg.architecture == "MLP_Mixer":
         model = create_MLP_Mixer(cfg, upper_bound)
-    elif cfg.architecture == "VGG":
+    elif "VGG" in cfg.architecture:
         model = create_VGG(cfg, upper_bound)
     else:
         raise ValueError(f"Invalid architecture argument {cfg.architecture}")
