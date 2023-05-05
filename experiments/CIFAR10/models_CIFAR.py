@@ -31,6 +31,7 @@ from deel.lipdp.layers import DP_Lambda
 from deel.lipdp.layers import DP_LayerCentering
 from deel.lipdp.layers import DP_Permute
 from deel.lipdp.layers import DP_Reshape
+from deel.lipdp.layers import DP_ScaledGlobalL2NormPooling2D
 from deel.lipdp.layers import DP_ScaledL2NormPooling2D
 from deel.lipdp.layers import DP_SpectralConv2D
 from deel.lipdp.layers import DP_SpectralDense
@@ -108,50 +109,112 @@ def create_MLP_Mixer(cfg, upper_bound):
 
 
 def create_VGG(cfg, upper_bound):
-    layers = [
-        DP_BoundedInput(input_shape=(32, 32, 3), upper_bound=upper_bound),
-        DP_SpectralConv2D(
-            filters=64,
-            kernel_size=5,
-            kernel_initializer="orthogonal",
-            strides=1,
-            use_bias=False,
-        ),
-        DP_AddBias(norm_max=1),
-        DP_GroupSort(2),
-        DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
-        DP_LayerCentering(),
-        DP_SpectralConv2D(
-            filters=256,
-            kernel_size=3,
-            kernel_initializer="orthogonal",
-            strides=1,
-            use_bias=False,
-        ),
-        DP_AddBias(norm_max=1),
-        DP_GroupSort(2),
-        DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
-        DP_LayerCentering(),
-        DP_SpectralConv2D(
-            filters=512,
-            kernel_size=3,
-            kernel_initializer="orthogonal",
-            strides=1,
-            use_bias=False,
-        ),
-        DP_AddBias(norm_max=1),
-        DP_GroupSort(2),
-        DP_ScaledL2NormPooling2D(pool_size=4, strides=4),
-        DP_Flatten(),
-        DP_LayerCentering(),
-        DP_SpectralDense(512, use_bias=False),
-        DP_AddBias(norm_max=1),
-        DP_GroupSort(2),
-        DP_SpectralDense(10, use_bias=False),
-        DP_AddBias(norm_max=1),
-        DP_ClipGradient(cfg.clip_loss_gradient),
-    ]
+    depth_conv = dict(VGG5_small=1, VGG5_large=1, VGG8_small=2, VGG8_large=2)
+    init_filters = dict(VGG5_small=32, VGG5_large=64, VGG8_small=32, VGG8_large=64)
 
+    assert cfg.architecture in depth_conv.keys()
+    return VGG_factory(
+        cfg,
+        depth_conv=depth_conv[cfg.architecture],
+        depth_fc=1,
+        init_filters=init_filters[cfg.architecture],
+        upper_bound=upper_bound,
+    )
+
+
+def VGG_factory(cfg, depth_conv, depth_fc, init_filters, upper_bound):
+    """Creates a VGG-like network.
+
+    The cfg object must contain some information:
+        - cfg.add_biases (bool): DP_AddBias layers after each linear layer.
+        - cfg.layer_centering (bool): DP_LayerCentering layers after each activation.
+
+    The VGG network is composed of three blocks of `depth` convolutional layers. A
+    pooling layer is appended to each block. The network ends with `depth_fc + 1`
+    fully-connected layers (the last one is the classification layer). The width of each
+    block is:
+        - filters in convolutional block 1: init_filters
+        - filters in convolutional block 2: init_filters * 2
+        - filters in convolutional block 3: init_filters * 4
+        - units in fully-connected layers: init_filters * 8
+
+    Args:
+        cfg: configuration containing information for DP_Sequential and VGG
+            hyper-parameters
+        depth_conv (int): number of convolutions in the three convolutional blocks.
+            Usually depth_conv=1 or 2.
+        depth_fc (int): number of fully-connected layers before the classification
+            layer. Usually depth_fc=1 or 2.
+        init_filters (int): number of filters in the first convolution block. Usually a
+            power of 2 (e.g. 32, 64 or 128).
+        upper_bound (float): maximum norm of the input (clipped if input norm is higher)
+
+    Returns:
+        DP_Sequential: DP VGG network
+    """
+    layers = []
+    layers.append(DP_BoundedInput(input_shape=(32, 32, 3), upper_bound=upper_bound))
+
+    # Convolutional block 1
+    for _ in range(depth_conv):
+        layers.append(
+            DP_SpectralConv2D(
+                filters=init_filters,
+                kernel_size=5,
+                kernel_initializer="orthogonal",
+                strides=1,
+                use_bias=False,
+            )
+        )
+        layers.append(DP_AddBias(norm_max=1))
+        layers.append(DP_GroupSort(2))
+        layers.append(DP_LayerCentering())
+    layers.append(DP_ScaledL2NormPooling2D(pool_size=2, strides=2))
+
+    # Convolutional block 2
+    for _ in range(depth_conv):
+        layers.append(
+            DP_SpectralConv2D(
+                filters=init_filters * 2,
+                kernel_size=3,
+                kernel_initializer="orthogonal",
+                strides=1,
+                use_bias=False,
+            )
+        )
+        layers.append(DP_AddBias(norm_max=1))
+        layers.append(DP_GroupSort(2))
+        layers.append(DP_LayerCentering())
+    layers.append(DP_ScaledL2NormPooling2D(pool_size=2, strides=2))
+
+    # Convolutional block 3
+    for _ in range(depth_conv):
+        layers.append(
+            DP_SpectralConv2D(
+                filters=init_filters * 4,
+                kernel_size=3,
+                kernel_initializer="orthogonal",
+                strides=1,
+                use_bias=False,
+            )
+        )
+        layers.append(DP_AddBias(norm_max=1))
+        layers.append(DP_GroupSort(2))
+        layers.append(DP_LayerCentering())
+    layers.append(DP_ScaledGlobalL2NormPooling2D())
+
+    # Fully connected layers
+    for _ in range(depth_fc):
+        layers.append(DP_SpectralDense(init_filters * 8, use_bias=False))
+        layers.append(DP_AddBias(norm_max=1))
+        layers.append(DP_GroupSort(2))
+        layers.append(DP_LayerCentering())
+
+    layers.append(DP_SpectralDense(10, use_bias=False))
+    layers.append(DP_AddBias(norm_max=1))
+    layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
+
+    # Remove DP_AddBias and DP_LayerCentering layers if required
     if cfg.add_biases is False:
         layers = [layer for layer in layers if not isinstance(layer, DP_AddBias)]
     if cfg.layer_centering is False:
