@@ -199,6 +199,5 @@ def train():
 def main(_):
     run_with_wandb(cfg=cfg, train_function=train, project="MNIST_ClipLess_SGD")
 
-
 if __name__ == "__main__":
     app.run(main)

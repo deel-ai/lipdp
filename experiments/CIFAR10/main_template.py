@@ -34,6 +34,7 @@ from tensorflow.keras.callbacks import ReduceLROnPlateau
 import wandb
 from models_CIFAR import create_MLP_Mixer
 from models_CIFAR import create_VGG
+from models_CIFAR import create_ResNet
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
 from deel.lip.losses import MulticlassKR
@@ -96,6 +97,8 @@ def create_model(cfg, upper_bound):
         model = create_MLP_Mixer(cfg, upper_bound)
     elif "VGG" in cfg.architecture:
         model = create_VGG(cfg, upper_bound)
+    elif cfg.architecture.startswith("resnet"):
+        model = create_ResNet(cfg, upper_bound)
     else:
         raise ValueError(f"Invalid architecture argument {cfg.architecture}")
     return model
@@ -151,7 +154,6 @@ def compile_model(model, cfg):
     )
     return model
 
-
 def train():
     init_wandb(cfg=cfg, project="dp-lipschitz_CIFAR10")
 
@@ -196,7 +198,6 @@ def train():
 
 def main(_):
     run_with_wandb(cfg=cfg, train_function=train, project="dp-lipschitz_CIFAR10")
-
 
 if __name__ == "__main__":
     app.run(main)
