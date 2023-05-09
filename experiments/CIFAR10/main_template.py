@@ -32,8 +32,8 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 
 import wandb
-from .models_CIFAR import create_MLP_Mixer
-from .models_CIFAR import create_VGG
+from models_CIFAR import create_MLP_Mixer
+from models_CIFAR import create_VGG
 from deel.lip.losses import MulticlassHinge
 from deel.lip.losses import MulticlassHKR
 from deel.lip.losses import MulticlassKR
@@ -51,7 +51,7 @@ cfg = config_dict.ConfigDict()
 cfg.add_biases = True
 cfg.alpha = 50.0
 cfg.architecture = "VGG5_small"
-cfg.batch_size = 2_048
+cfg.batch_size = 8_000
 cfg.clip_loss_gradient = 0.2
 cfg.condense = True
 cfg.delta = 1e-5
@@ -62,7 +62,7 @@ cfg.K = 0.99
 cfg.layer_centering = True
 cfg.learning_rate = 1e-3
 cfg.lip_coef = 1.0
-cfg.log_wandb = "disabled"
+cfg.log_wandb = "sweep_test_vgg5_small"
 cfg.min_margin = 0.5
 cfg.min_norm = 5.21
 cfg.mlp_channel_dim = 128
