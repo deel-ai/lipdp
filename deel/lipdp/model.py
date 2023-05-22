@@ -21,6 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import math
+from dataclasses import dataclass
 
 import numpy as np
 import tensorflow as tf
@@ -31,7 +32,14 @@ from tensorflow import keras
 
 import deel
 from deel.lipdp.layers import DPLayer
-from deel.lipdp.losses import get_lip_constant_loss
+from deel.lipdp.pipeline import DatasetMetadata
+
+
+@dataclass
+class DPParameters:
+    noisify_strategy: str
+    noise_multiplier: float
+    delta: float
 
 
 class Global_DPGD_Mechanism(Mechanism):
@@ -128,8 +136,7 @@ class DP_Accountant(keras.callbacks.Callback):
         self.log_fn = log_fn
 
     def on_epoch_end(self, epoch, logs=None):
-        steps_per_epoch = math.ceil(self.model.cfg.N / self.model.cfg.batch_size)
-        niter = (epoch + 1) * steps_per_epoch
+        niter = (epoch + 1) * self.model.dataset_metadata.nb_steps_per_epochs
         epsilon, delta = get_eps_delta(model=self.model, niter=niter)
         print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
         # plot epoch at the same time as epsilon and delta to ease comparison of plots in wandb API.
@@ -137,21 +144,23 @@ class DP_Accountant(keras.callbacks.Callback):
 
 
 def get_eps_delta(model, niter):
-    prob = model.cfg.batch_size / model.cfg.N
+    prob = model.dataset_metadata.batch_size / model.dataset_metadata.nb_samples_train
     # nm_coefs.values are in the right order because:
     # since Python 3.6 dictionaries are ordered by insertion order - this is an implementation detail and not guaranteed by the language spec.
     # since Python 3.7 dictionaries are ordered by insertion order - this is guaranteed by the language spec.
-    if model.cfg.noisify_strategy == "local":
+    if model.dp_parameters.noisify_strategy == "local":
         nm_coefs = get_noise_multiplier_coefs(model)
-        sigmas = [model.cfg.noise_multiplier * coef for coef in nm_coefs.values()]
+        sigmas = [
+            model.dp_parameters.noise_multiplier * coef for coef in nm_coefs.values()
+        ]
         mech = Local_DPGD_Mechanism(
-            prob=prob, sigmas=sigmas, delta=model.cfg.delta, niter=niter
+            prob=prob, sigmas=sigmas, delta=model.dp_parameters.delta, niter=niter
         )
-    if model.cfg.noisify_strategy == "global":
+    if model.dp_parameters.noisify_strategy == "global":
         mech = Global_DPGD_Mechanism(
             prob=prob,
-            sigma=model.cfg.noise_multiplier,
-            delta=model.cfg.delta,
+            sigma=model.dp_parameters.noise_multiplier,
+            delta=model.dp_parameters.delta,
             niter=niter,
         )
     return mech.epsilon, mech.delta
@@ -200,15 +209,16 @@ def compute_gradient_bounds(model):
     # Forward pass to assess maximum activation norms
     for layer in model.layers_forward_order():
         assert isinstance(layer, DPLayer)
-        if model.cfg.run_eagerly:
+        if model.debug:
             print(f"Layer {layer.name} input bound: {input_bound}")
         input_bounds[layer.name] = input_bound
         input_bound = layer.propagate_inputs(input_bound)
 
-    if model.cfg.run_eagerly:
+    if model.debug:
         print(f"Layer {layer.name} input bound: {input_bound}")
 
-    gradient_bound = get_lip_constant_loss(model.cfg, input_bound)
+    # since we aggregate using SUM_OVER_BATCH
+    gradient_bound = model.loss.get_L() / model.dataset_metadata.batch_size
 
     # Backward pass to compute gradient norm bounds and accumulate Lip constant
     for layer in model.layers_backward_order():
@@ -245,14 +255,16 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
     for grad, var in zip(gradients, trainable_vars):
         if var.name in gradient_bounds.keys():
             stddev = (
-                model.cfg.noise_multiplier
+                model.dp_parameters.noise_multiplier
                 * gradient_bounds[var.name]
                 * nm_coefs[var.name]
                 * 2
             )
             noises.append(tf.random.normal(shape=tf.shape(grad), stddev=stddev))
-            if model.cfg.run_eagerly:
-                upperboundgrad = gradient_bounds[var.name] * model.cfg.batch_size
+            if model.debug:
+                upperboundgrad = (
+                    gradient_bounds[var.name] * model.dataset_metadata.batch_size
+                )
                 noise_msg = (
                     f"Adding noise of stddev : {stddev}"
                     f" to variable {var.name}"
@@ -286,11 +298,13 @@ def global_noisify(model, gradient_bounds, trainable_vars, gradients):
     global_sensitivity = np.sqrt(
         sum([bound**2 for bound in gradient_bounds.values()])
     )
-    stddev = model.cfg.noise_multiplier * global_sensitivity
+    stddev = model.dp_parameters.noise_multiplier * global_sensitivity
     noises = [tf.random.normal(shape=tf.shape(g), stddev=stddev) for g in gradients]
-    if model.cfg.run_eagerly:
+    if model.debug:
         for grad, var in zip(gradients, trainable_vars):
-            upperboundgrad = gradient_bounds[var.name] * model.cfg.batch_size
+            upperboundgrad = (
+                gradient_bounds[var.name] * model.dataset_metadata.batch_size
+            )
             noise_msg = (
                 f"Adding noise of stddev : {stddev}"
                 f" to variable {var.name}"
@@ -303,27 +317,37 @@ def global_noisify(model, gradient_bounds, trainable_vars, gradients):
 
 
 class DP_Sequential(deel.lip.model.Sequential):
-    """ "Model Class based on the DEEL Sequential model. Takes into account the architecture, only the following components are allowed :
-    - Input
-    - SpectralDense
-    - SpectralConv2D
-    - Flatten
-    - ScaledL2GlobalPooling
-    Args :
-      Architecture: Sequential like input
-      cfg: Contains the experiment config, must contain the batch size information and the chosen noise multiplier.
-      X: The previously determined maximum norm among the training set.
-    The model is then calibrated to verify (epsilon,delta)-DP guarantees by noisying the values of the gradients during the training step.
-    Do not modify the config object after the model has been declared with config object cfg.
-    Hypothesis: The model is 1-Lipschitz and Dense layers are Gradient Norm Preserving.
-    """
+    def __init__(
+        self,
+        *args,
+        dp_parameters: DPParameters,
+        dataset_metadata: DatasetMetadata,
+        debug: bool = False,
+        **kwargs,
+    ):
+        """Model Class based on the DEEL Sequential model. Only layer from the lipdp.layers module are allowed since
+        the framework assume 1 lipschitz layers.
 
-    def __init__(self, *args, noisify_strategy, cfg, **kwargs):
+        Args:
+            dp_parameters (DPParameters): parameters used to set the dp procedure.
+            dataset_metadata (DatasetMetadata): information about the dataset. Must contain: the input shape, number
+                of training samples, the input bound, number of batches in the dataset and the batch size.
+            debug (bool, optional): when true print additionnal debug informations (must be in eager mode). Defaults to False.
+
+        Note:
+            The model is then calibrated to verify (epsilon,delta)-DP guarantees by noisying the values of the gradients during the training step.
+            DP accounting is done with the associated Callback.
+
+        Raises:
+            TypeError: when the dp_parameters.noisify_strategy is not one of "local" or "global"
+        """
         super().__init__(*args, **kwargs)
-        self.cfg = cfg
-        if noisify_strategy == "global":
+        self.dp_parameters = dp_parameters
+        self.dataset_metadata = dataset_metadata
+        self.debug = debug
+        if self.dp_parameters.noisify_strategy == "global":
             self.noisify_fun = global_noisify
-        elif noisify_strategy == "local":
+        elif self.dp_parameters.noisify_strategy == "local":
             self.noisify_fun = local_noisify
         else:
             raise TypeError(
@@ -362,34 +386,46 @@ class DP_Sequential(deel.lip.model.Sequential):
         # Update Metrics
         self.compiled_metrics.update_state(y, y_pred)
         # Condense to verify |W|_2 = 1
-        if self.cfg.condense:
-            self.condense()
+        self.condense()
         return {m.name: m.result() for m in self.metrics}
 
 
 class DP_Model(deel.lip.model.Model):
-    """ "Model Class based on the DEEL Sequential model. Takes into account the architecture, only the following components are allowed :
-    - Input
-    - SpectralDense
-    - SpectralConv2D
-    - Flatten
-    - ScaledL2GlobalPooling
-    Args :
-      Architecture: Sequential like input
-      cfg: Contains the experiment config, must contain the batch size information and the chosen noise multiplier.
-      X: The previously determined maximum norm among the training set.
-    The model is then calibrated to verify (epsilon,delta)-DP guarantees by noisying the values of the gradients during the training step.
-    Do not modify the config object after the model has been declared with config object cfg.
-    Hypothesis: The model is 1-Lipschitz and Dense layers are Gradient Norm Preserving.
-    """
+    def __init__(
+        self,
+        dp_layers,
+        *args,
+        dp_parameters: DPParameters,
+        dataset_metadata: DatasetMetadata,
+        debug: bool = False,
+        **kwargs,
+    ):
+        """Model Class based on the DEEL Sequential model. Only layer from the lipdp.layers module are allowed since
+        the framework assume 1 lipschitz layers.
 
-    def __init__(self, dp_layers, *args, noisify_strategy, cfg, **kwargs):
+        Args:
+            dp_layers: the list of layers to use ( as done in sequential ) but here we can leverage
+                the fact that layers may have multiple inputs/outputs.
+            dp_parameters (DPParameters): parameters used to set the dp procedure.
+            dataset_metadata (DatasetMetadata): information about the dataset. Must contain: the input shape, number
+                of training samples, the input bound, number of batches in the dataset and the batch size.
+            debug (bool, optional): when true print additionnal debug informations (must be in eager mode). Defaults to False.
+
+        Note:
+            The model is then calibrated to verify (epsilon,delta)-DP guarantees by noisying the values of the gradients during the training step.
+            DP accounting is done with the associated Callback.
+
+        Raises:
+            TypeError: when the dp_parameters.noisify_strategy is not one of "local" or "global"
+        """
         super().__init__(*args, **kwargs)
         self.dp_layers = dp_layers
-        self.cfg = cfg
-        if noisify_strategy == "global":
+        self.dp_parameters = dp_parameters
+        self.dataset_metadata = dataset_metadata
+        self.debug = debug
+        if self.dp_parameters.noisify_strategy == "global":
             self.noisify_fun = global_noisify
-        elif noisify_strategy == "local":
+        elif self.dp_parameters.noisify_strategy == "local":
             self.noisify_fun = local_noisify
         else:
             raise TypeError(
@@ -434,6 +470,5 @@ class DP_Model(deel.lip.model.Model):
         # Update Metrics
         self.compiled_metrics.update_state(y, y_pred)
         # Condense to verify |W|_2 = 1
-        if self.cfg.condense:
-            self.condense()
+        self.condense()
         return {m.name: m.result() for m in self.metrics}

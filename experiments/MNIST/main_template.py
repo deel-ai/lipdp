@@ -26,33 +26,28 @@ import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import wandb
 import yaml
 from absl import app
 from absl import flags
 from ml_collections import config_dict
 from ml_collections import config_flags
+from models_MNIST import create_ConvNet
+from models_MNIST import create_Dense_Model
 from tensorflow import keras
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Input
-
-import wandb
-from .models_MNIST import create_ConvNet
-from .models_MNIST import create_Dense_Model
-from deel.lip.activations import GroupSort
-from deel.lip.losses import MulticlassHinge
-from deel.lip.losses import MulticlassHKR
-from deel.lip.losses import MulticlassKR
-from deel.lip.losses import TauCategoricalCrossentropy
-from deel.lipdp.losses import get_lip_constant_loss
-from deel.lipdp.losses import KCosineSimilarity
-from deel.lipdp.model import DP_Accountant
-from deel.lipdp.model import DP_Sequential
-from deel.lipdp.pipeline import load_data_mnist
-from deel.lipdp.sensitivity import get_max_epochs
 from wandb.keras import WandbCallback
 from wandb.keras import WandbMetricsLogger
+
+from deel.lipdp.losses import *
+from deel.lipdp.model import DP_Accountant
+from deel.lipdp.model import DPParameters
+from deel.lipdp.pipeline import bound_clip_value
+from deel.lipdp.pipeline import load_and_prepare_data
+from deel.lipdp.sensitivity import get_max_epochs
 from wandb_sweeps.src_config.wandb_utils import init_wandb
 from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
@@ -93,11 +88,11 @@ cfg.tag = "Default"
 _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 
 
-def create_model(cfg, InputUpperBound):
+def create_model(dp_parameters, dataset_metadata, cfg, upper_bound):
     if cfg.architecture == "ConvNet":
-        model = create_ConvNet(cfg, InputUpperBound)
+        model = create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound)
     elif cfg.architecture == "Dense":
-        model = create_Dense_Model(cfg, InputUpperBound)
+        model = create_Dense_Model(dp_parameters, dataset_metadata, cfg, upper_bound)
     else:
         raise ValueError(f"Invalid architecture argument {cfg.architecture}")
     return model
@@ -115,29 +110,29 @@ def compile_model(model, cfg):
     if cfg.loss == "MulticlassHKR":
         if cfg.optimizer == "SGD":
             cfg.learning_rate = cfg.learning_rate / cfg.alpha
-        loss = MulticlassHKR(
+        loss = DP_MulticlassHKR(
             alpha=cfg.alpha,
             min_margin=cfg.min_margin,
             reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
         )
     elif cfg.loss == "MulticlassHinge":
-        loss = MulticlassHinge(
+        loss = DP_MulticlassHinge(
             min_margin=cfg.min_margin,
             reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
         )
     elif cfg.loss == "MulticlassKR":
-        loss = MulticlassKR(reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
+        loss = DP_MulticlassKR(reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
     elif cfg.loss == "TauCategoricalCrossentropy":
-        loss = TauCategoricalCrossentropy(
+        loss = DP_TauCategoricalCrossentropy(
             cfg.tau, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
     elif cfg.loss == "KCosineSimilarity":
         KX_min = cfg.K * cfg.min_norm
-        loss = KCosineSimilarity(
+        loss = DP_KCosineSimilarity(
             KX_min, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
     elif cfg.loss == "MAE":
-        loss = tf.keras.losses.MeanAbsoluteError(
+        loss = DP_MeanAbsoluteError(
             reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
     else:
@@ -157,8 +152,23 @@ def compile_model(model, cfg):
 def train():
     init_wandb(cfg=cfg, project="MNIST_ClipLess_SGD")
 
-    x_train, x_test, y_train, y_test, upper_bound = load_data_mnist(cfg)
-    model = create_model(cfg, upper_bound)
+    ds_train, ds_test, dataset_metadata = load_and_prepare_data(
+        "mnist",
+        cfg.batch_size,
+        colorspace="RGB",
+        drop_remainder=True,
+        bound_fct=bound_clip_value(cfg.input_clipping),
+    )
+    model = create_model(
+        DPParameters(
+            noisify_strategy=cfg.noisify_strategy,
+            noise_multiplier=cfg.noise_multiplier,
+            delta=cfg.delta,
+        ),
+        dataset_metadata,
+        cfg,
+        upper_bound=dataset_metadata.max_norm,
+    )
     model = compile_model(model, cfg)
     model.summary()
     num_epochs = get_max_epochs(cfg.epsilon_max, model)
@@ -171,10 +181,9 @@ def train():
         DP_Accountant(),
     ]
     hist = model.fit(
-        x_train,
-        y_train,
+        ds_train,
         epochs=num_epochs,
-        validation_data=(x_test, y_test),
+        validation_data=ds_test,
         batch_size=cfg.batch_size,
         callbacks=callbacks,
     )

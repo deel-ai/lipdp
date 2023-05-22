@@ -24,26 +24,24 @@ import os
 
 import numpy as np
 import tensorflow as tf
+import wandb
 import yaml
 from absl import app
 from ml_collections import config_dict
 from ml_collections import config_flags
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.callbacks import ReduceLROnPlateau
-
-import wandb
 from models_CIFAR import create_MLP_Mixer
 from models_CIFAR import create_VGG
 from models_CIFAR import create_ResNet
-from deel.lip.losses import MulticlassHinge
-from deel.lip.losses import MulticlassHKR
-from deel.lip.losses import MulticlassKR
-from deel.lip.losses import TauCategoricalCrossentropy
-from deel.lipdp.losses import KCosineSimilarity
-from deel.lipdp.model import DP_Accountant
-from deel.lipdp.pipeline import load_data_cifar
-from deel.lipdp.sensitivity import get_max_epochs
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import ReduceLROnPlateau
 from wandb.keras import WandbCallback
+
+from deel.lipdp.losses import *
+from deel.lipdp.model import DP_Accountant
+from deel.lipdp.model import DPParameters
+from deel.lipdp.pipeline import bound_clip_value
+from deel.lipdp.pipeline import load_and_prepare_data
+from deel.lipdp.sensitivity import get_max_epochs
 from wandb_sweeps.src_config.wandb_utils import init_wandb
 from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
@@ -51,7 +49,7 @@ cfg = config_dict.ConfigDict()
 
 cfg.add_biases = True
 cfg.alpha = 50.0
-cfg.architecture = "VGG5_small"
+cfg.architecture = "resnet6a_small"
 cfg.batch_size = 8_000
 cfg.clip_loss_gradient = 0.2
 cfg.condense = True
@@ -63,7 +61,7 @@ cfg.K = 0.99
 cfg.layer_centering = True
 cfg.learning_rate = 1e-3
 cfg.lip_coef = 1.0
-cfg.log_wandb = "sweep_test_vgg5_small"
+cfg.log_wandb = "disabled"
 cfg.min_margin = 0.5
 cfg.min_norm = 5.21
 cfg.mlp_channel_dim = 128
@@ -92,13 +90,13 @@ cfg.loss = "TauCategoricalCrossentropy"
 _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 
 
-def create_model(cfg, upper_bound):
+def create_model(dp_parameters, dataset_metadata, cfg, upper_bound):
     if cfg.architecture == "MLP_Mixer":
-        model = create_MLP_Mixer(cfg, upper_bound)
+        model = create_MLP_Mixer(dp_parameters, dataset_metadata, cfg, upper_bound)
     elif "VGG" in cfg.architecture:
-        model = create_VGG(cfg, upper_bound)
+        model = create_VGG(dp_parameters, dataset_metadata, cfg, upper_bound)
     elif cfg.architecture.startswith("resnet"):
-        model = create_ResNet(cfg, upper_bound)
+        model = create_ResNet(dp_parameters, dataset_metadata, cfg, upper_bound)
     else:
         raise ValueError(f"Invalid architecture argument {cfg.architecture}")
     return model
@@ -116,29 +114,29 @@ def compile_model(model, cfg):
     if cfg.loss == "MulticlassHKR":
         if cfg.optimizer == "SGD":
             cfg.learning_rate = cfg.learning_rate / (1 + cfg.alpha)
-        loss = MulticlassHKR(
+        loss = DP_MulticlassHKR(
             alpha=cfg.alpha,
             min_margin=cfg.min_margin,
             reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
         )
     elif cfg.loss == "MulticlassHinge":
-        loss = MulticlassHinge(
+        loss = DP_MulticlassHinge(
             min_margin=cfg.min_margin,
             reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
         )
     elif cfg.loss == "MulticlassKR":
-        loss = MulticlassKR(reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
+        loss = DP_MulticlassKR(reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
     elif cfg.loss == "TauCategoricalCrossentropy":
-        loss = TauCategoricalCrossentropy(
+        loss = DP_TauCategoricalCrossentropy(
             cfg.tau, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
     elif cfg.loss == "KCosineSimilarity":
         K_min = cfg.K
-        loss = KCosineSimilarity(
+        loss = DP_KCosineSimilarity(
             K_min, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
     elif cfg.loss == "MAE":
-        loss = tf.keras.losses.MeanAbsoluteError(
+        loss = DP_MeanAbsoluteError(
             reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
     else:
@@ -157,8 +155,23 @@ def compile_model(model, cfg):
 def train():
     init_wandb(cfg=cfg, project="dp-lipschitz_CIFAR10")
 
-    x_train, x_test, y_train, y_test, upper_bound = load_data_cifar(cfg)
-    model = create_model(cfg, upper_bound)
+    ds_train, ds_test, dataset_metadata = load_and_prepare_data(
+        "cifar10",
+        cfg.batch_size,
+        colorspace=cfg.representation,
+        drop_remainder=True,
+        bound_fct=bound_clip_value(cfg.input_clipping),
+    )
+    model = create_model(
+        DPParameters(
+            noisify_strategy=cfg.noisify_strategy,
+            noise_multiplier=cfg.noise_multiplier,
+            delta=cfg.delta,
+        ),
+        dataset_metadata,
+        cfg,
+        upper_bound=dataset_metadata.max_norm,
+    )
     model = compile_model(model, cfg)
     num_epochs = get_max_epochs(cfg.epsilon_max, model)
     model.summary()
@@ -171,10 +184,9 @@ def train():
         DP_Accountant(),
     ]
     hist = model.fit(
-        x_train,
-        y_train,
+        ds_train,
         epochs=num_epochs,
-        validation_data=(x_test, y_test),
+        validation_data=ds_test,
         batch_size=cfg.batch_size,
         callbacks=callbacks,
     )

@@ -75,7 +75,7 @@ def create_Dense_Model(cfg, upper_bound):
     return model
 
 
-def create_ConvNet(cfg, upper_bound):
+def create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound):
     all_layers = [
         DP_BoundedInput(input_shape=(28, 28, 1), upper_bound=upper_bound),
         DP_SpectralConv2D(
@@ -110,13 +110,13 @@ def create_ConvNet(cfg, upper_bound):
     if not cfg.add_biases:
         model = DP_Sequential(
             [layer for layer in all_layers if not isinstance(layer, DP_AddBias)],
-            cfg=cfg,
-            noisify_strategy=cfg.noisify_strategy,
+            dp_parameters=dp_parameters,
+            dataset_metadata=dataset_metadata,
         )
     elif cfg.add_biases:
         model = DP_Sequential(
             all_layers,
-            cfg=cfg,
-            noisify_strategy=cfg.noisify_strategy,
+            dp_parameters=dp_parameters,
+            dataset_metadata=dataset_metadata,
         )
     return model
