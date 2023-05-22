@@ -25,8 +25,19 @@ import math
 import tensorflow as tf
 from tensorflow.python.keras.losses import Loss
 
+from deel.lip.losses import MulticlassHinge
+from deel.lip.losses import MulticlassHKR
+from deel.lip.losses import MulticlassKR
+from deel.lip.losses import TauCategoricalCrossentropy
 
-class KCosineSimilarity(Loss):
+
+class DP_Loss(Loss):
+    def get_L(self):
+        """returns the lipschitz constant of the loss"""
+        raise NotImplementedError()
+
+
+class DP_KCosineSimilarity(DP_Loss):
     def __init__(
         self,
         K=1.0,
@@ -37,7 +48,7 @@ class KCosineSimilarity(Loss):
         super().__init__(reduction=reduction, name=name)
         # as the espilon is applied before the sqrt in tf.linalg.l2_normalize we
         # apply square to it
-        self.K = K ** 2
+        self.K = K**2
         self.axis = axis
 
     @tf.function
@@ -46,30 +57,151 @@ class KCosineSimilarity(Loss):
         y_pred = tf.linalg.l2_normalize(y_pred, epsilon=self.K, axis=self.axis)
         return -tf.reduce_sum(y_true * y_pred, axis=self.axis)
 
+    def get_L(self):
+        """returns the lipschitz constant of the loss"""
+        return 1 / float(self.K)
 
-# FIRST TRY : TO DEBUG
-def get_lip_constant_loss(cfg, input_bound):
-    """Get the maximum norm of elementwise gradients, taking into account the renormalization factor consequent to the batch size.
 
-    Args:
-        cfg (dict): Configuration dictionary.
-        input_bound (float): Bound on the input of the loss (i.e norm of the output of the last layer).
+class DP_TauCategoricalCrossentropy(TauCategoricalCrossentropy, DP_Loss):
+    def __init__(
+        self,
+        tau,
+        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+        name="TauCategoricalCrossentropy",
+    ):
+        """
+        Similar to original categorical crossentropy, but with a settable temperature
+        parameter.
 
-    Returns:
-        float: Lipschitz constant of the loss function.
-    """
-    if cfg.loss in [
-        "MulticlassHinge",
-        "MulticlassKR",
-        "MAE",
-    ]:
-        L = 1
-    elif cfg.loss == "MulticlassHKR":
-        L = cfg.alpha + 1
-    elif cfg.loss == "TauCategoricalCrossentropy":
-        L = math.sqrt(2)
-    elif cfg.loss == "KCosineSimilarity":
-        L = 1 / float(cfg.K)
-    else:
-        raise TypeError(f"Unrecognised Loss Function Argument {cfg.loss}")
-    return L / cfg.batch_size
+        Args:
+            tau (float): temperature parameter.
+            reduction: reduction of the loss, must be SUM_OVER_BATCH_SIZE in order have a correct accounting.
+            name (str): name of the loss
+        """
+        super(DP_TauCategoricalCrossentropy, self).__init__(
+            tau=tau, reduction=reduction, name=name
+        )
+
+    def get_L(self):
+        """returns the lipschitz constant of the loss"""
+        # as the implementation divide the loss by self.tau (and as it is used with "from_logit=True")
+        return math.sqrt(2)
+
+
+class DP_MulticlassHKR(MulticlassHKR, DP_Loss):
+    def __init__(
+        self,
+        alpha=10.0,
+        min_margin=1.0,
+        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+        name="MulticlassHKR",
+    ):
+        """
+        The multiclass version of HKR. This is done by computing the HKR term over each
+        class and averaging the results.
+
+        Note that `y_true` should be one-hot encoded or pre-processed with the
+        `deel.lip.utils.process_labels_for_multi_gpu()` function.
+
+        Using a multi-GPU/TPU strategy requires to set `multi_gpu` to True and to
+        pre-process the labels `y_true` with the
+        `deel.lip.utils.process_labels_for_multi_gpu()` function.
+
+        Args:
+            alpha (float): regularization factor
+            min_margin (float): margin to enforce.
+            multi_gpu (bool): set to True when running on multi-GPU/TPU
+            reduction: passed to tf.keras.Loss constructor
+            name (str): passed to tf.keras.Loss constructor
+
+        """
+        super(DP_MulticlassHKR, self).__init__(
+            alpha=alpha,
+            min_margin=min_margin,
+            multi_gpu=False,
+            reduction=reduction,
+            name=name,
+        )
+
+    def get_L(self):
+        """returns the lipschitz constant of the loss"""
+        return self.alpha + 1.0
+
+
+class DP_MulticlassHinge(MulticlassHinge, DP_Loss):
+    def __init__(
+        self,
+        min_margin=1.0,
+        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+        name="MulticlassHinge",
+    ):
+        """
+        Loss to estimate the Hinge loss in a multiclass setup. It computes the
+        element-wise Hinge term. Note that this formulation differs from the one
+        commonly found in tensorflow/pytorch (which maximises the difference between
+        the two largest logits). This formulation is consistent with the binary
+        classification loss used in a multiclass fashion.
+
+        Note that `y_true` should be one-hot encoded or pre-processed with the
+        `deel.lip.utils.process_labels_for_multi_gpu()` function.
+
+        Args:
+            min_margin (float): margin to enforce.
+            reduction: passed to tf.keras.Loss constructor
+            name (str): passed to tf.keras.Loss constructor
+
+        """
+        super(DP_MulticlassHinge, self).__init__(
+            min_margin=min_margin, reduction=reduction, name=name
+        )
+
+    def get_L(self):
+        """returns the lipschitz constant of the loss"""
+        return 1.0
+
+
+class DP_MulticlassKR(MulticlassKR, DP_Loss):
+    def __init__(
+        self,
+        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+        name="MulticlassKR",
+    ):
+        r"""
+        Loss to estimate average of Wasserstein-1 distance using Kantorovich-Rubinstein
+        duality over outputs. In this multiclass setup, the KR term is computed for each
+        class and then averaged.
+
+        Note that `y_true` should be one-hot encoded or pre-processed with the
+        `deel.lip.utils.process_labels_for_multi_gpu()` function.
+
+        Using a multi-GPU/TPU strategy requires to set `multi_gpu` to True and to
+        pre-process the labels `y_true` with the
+        `deel.lip.utils.process_labels_for_multi_gpu()` function.
+
+        Args:
+            multi_gpu (bool): set to True when running on multi-GPU/TPU
+            reduction: passed to tf.keras.Loss constructor
+            name (str): passed to tf.keras.Loss constructor
+
+        """
+        super(DP_MulticlassKR, self).__init__(reduction=reduction, name=name)
+
+    def get_L(self):
+        """returns the lipschitz constant of the loss"""
+        return 1.0
+
+
+class DP_MeanAbsoluteError(tf.keras.losses.MeanAbsoluteError, DP_Loss):
+    def __init__(
+        self,
+        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+        name="MulticlassKR",
+    ):
+        r"""
+        Mean Absolute Error
+        """
+        super(DP_MeanAbsoluteError, self).__init__(reduction=reduction, name=name)
+
+    def get_L(self):
+        """returns the lipschitz constant of the loss"""
+        return 1.0

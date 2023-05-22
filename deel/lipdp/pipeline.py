@@ -20,121 +20,167 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+from dataclasses import dataclass
+from typing import List
+from typing import Tuple
+
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.datasets import cifar10
-from tensorflow.keras.datasets import fashion_mnist
-from tensorflow.keras.datasets import mnist
-from tensorflow.keras.utils import to_categorical
+import tensorflow_datasets as tfds
 
 
-def load_data_cifar(cfg):
+@dataclass
+class DatasetMetadata:
     """
-    Loads the CIFAR10 dataset and outputs a tuple containing x_train,x_test,y_train,y_test,upper_bound. Four image representation
-    systems are allowed "RGB", "HSV", "YIQ", "YUV". The upper_bound is computed on the clipped dataset of chosen representation.
-
-    Args :
-        cfg : Config object containing the chosen representation allow with the input_clipping factor.
-
-    Returns :
-        x_train (training dataset)
-        y_train (training labels)
-        x_test (testing dataset)
-        y_test (testing labels)
-        upper_bound (float) : Value of the maximum norm of transformed and clipped training dataset.
+    class that handle dataset metadata that will be used
+    to compute privacy guarantees
     """
-    # Load data
-    (x_train, y_train_ord), (x_test, y_test_ord) = cifar10.load_data()
-    # Normalize
-    x_train = x_train / 255
-    x_test = x_test / 255
-    if cfg.representation == "RGB":
-        pass
-    elif cfg.representation == "HSV":
-        x_train, x_test = tf.image.rgb_to_hsv(x_train), tf.image.rgb_to_hsv(x_test)
-    elif cfg.representation == "YIQ":
-        x_train, x_test = tf.image.rgb_to_yiq(x_train), tf.image.rgb_to_yiq(x_test)
-    elif cfg.representation == "YUV":
-        x_train, x_test = tf.image.rgb_to_yuv(x_train), tf.image.rgb_to_yuv(x_test)
+
+    input_shape: Tuple[int, int, int]
+    nb_classes: int
+    nb_samples_train: int
+    nb_samples_test: int
+    class_names: List[str]
+    nb_steps_per_epochs: int
+    batch_size: int
+    max_norm: float
+
+
+def get_colorspace_function(colorspace: str):
+    if colorspace.upper() == "RGB":
+        return lambda x, y: (x, y)
+    elif colorspace.upper() == "HSV":
+        return lambda x, y: (tf.image.rgb_to_hsv(x), y)
+    elif colorspace.upper() == "YIQ":
+        return lambda x, y: (tf.image.rgb_to_yiq(x), y)
+    elif colorspace.upper() == "YUV":
+        return lambda x, y: (tf.image.rgb_to_yuv(x), y)
     else:
         raise ValueError("Incorrect representation argument in config")
-    # One hot labels for multiclass classifier
-    y_train = to_categorical(y_train_ord)
-    y_test = to_categorical(y_test_ord)
-    # Get L2 norm upper bound
-    upper_bound = (
-        np.max(tf.reduce_sum(x_train**2, axis=list(range(1, x_train.ndim))) ** 0.5)
-        * cfg.input_clipping
+
+
+def bound_clip_value(value):
+    def bound(x, y):
+        """clip samplewise"""
+        return tf.clip_by_norm(x, value), y
+
+    return bound, value
+
+
+def bound_normalize():
+    def bound(x, y):
+        """normalize samplewise"""
+        return tf.linalg.l2_normalize(x), y
+
+    return bound, 1.0
+
+
+def load_and_prepare_data(
+    dataset_name: str = "mnist",
+    batch_size: int = 256,
+    colorspace: str = "RGB",
+    drop_remainder=True,
+    augmentation_fct=None,
+    bound_fct=None,
+):
+    """
+    load dataset_name data using tensorflow datasets.
+
+    Args:
+        dataset_name (str): name of the dataset to load.
+        batch_size (int): batch size
+        colorspace (str): one of RGB, HSV, YIQ, YUV
+        drop_remainder (bool, optional): when true drop the last batch if it
+            has less than batch_size elements. Defaults to True.
+        augmentation_fct (callable, optional): data augmentation to be applied
+            to train. the function must take a tuple (img, label) and return a
+            tuple of (img, label). Defaults to None.
+        bound_fct (callable, optional): function that is responsible of
+            bounding the inputs. Can be None, bound_normalize or bound_clip_value.
+            None means that no clipping is performed, and max theoretical value is
+            reported ( sqrt(w*h*c) ). bound_normalize means that each input is
+            normalized setting the bound to 1. bound_clip_value will clip norm to
+            defined value.
+
+    Returns:
+        ds_train, ds_test, metadat: two dataset, with data preparation,
+            augmentation, shuffling and batching. Also return an
+            DatasetMetadata object with infos about the dataset.
+    """
+    # load data
+    (ds_train, ds_test), ds_info = tfds.load(
+        dataset_name,
+        split=["train", "test"],
+        shuffle_files=True,
+        as_supervised=True,
+        with_info=True,
     )
-    # Clip training and testing set imgs
-    x_train = tf.clip_by_norm(x_train, upper_bound, axes=list(range(1, x_train.ndim)))
-    x_test = tf.clip_by_norm(x_test, upper_bound, axes=list(range(1, x_test.ndim)))
-    return x_train, x_test, y_train, y_test, upper_bound
-
-
-def load_data_mnist(cfg):
-    """
-    Loads the MNIST dataset and outputs tuple containing x_train,x_test,y_train,y_test,upper_bound. The upper_bound is computed
-    the clipped dataset.
-
-    Args :
-        cfg : Config object containing the chosen representation allow with the input_clipping factor.
-
-    Returns :
-        x_train (training dataset)
-        y_train (training labels)
-        x_test (testing dataset)
-        y_test (testing labels)
-        upper_bound (float) : Value of the maximum norm of clipped training dataset.
-    """
-    # Load data
-    (x_train, y_train_ord), (x_test, y_test_ord) = mnist.load_data()
-    # Normalize
-    x_train = np.expand_dims(x_train, -1) / 255
-    x_test = np.expand_dims(x_test, -1) / 255
-    # One hot labels for multiclass classifier
-    y_train = to_categorical(y_train_ord)
-    y_test = to_categorical(y_test_ord)
-    # Get L2 norm upper bound
-    upper_bound = (
-        np.max(tf.reduce_sum(x_train**2, axis=list(range(1, x_train.ndim))) ** 0.5)
-        * cfg.input_clipping
+    # handle case where functions are None
+    if augmentation_fct is None:
+        augmentation_fct = lambda x, y: (x, y)
+    # None bound yield default trivial bound
+    nb_classes = ds_info.features["label"].num_classes
+    input_shape = ds_info.features["image"].shape
+    if bound_fct is None:
+        bound_fct = (
+            lambda x, y: (x, y),
+            input_shape[-3] * input_shape[-2] * input_shape[-1],
+        )
+    bound_callable, bound_val = bound_fct
+    # train pipeline
+    ds_train = (
+        ds_train.map(  # map to 0,1 and one hot encode
+            lambda x, y: (
+                tf.cast(x, tf.float32) / 255.0,
+                tf.one_hot(y, nb_classes),
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
+        .shuffle(  # shuffle
+            min(batch_size * 10, max(batch_size, ds_train.cardinality())),
+            reshuffle_each_iteration=True,
+        )
+        .map(augmentation_fct, num_parallel_calls=tf.data.AUTOTUNE)  # augment
+        .map(  # map colorspace
+            get_colorspace_function(colorspace),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
+        .map(bound_callable, num_parallel_calls=tf.data.AUTOTUNE)  # apply bound
+        .batch(batch_size, drop_remainder=drop_remainder)  # batch
+        .prefetch(tf.data.AUTOTUNE)
     )
-    # Clip training and testing set imgs
-    x_train = tf.clip_by_norm(x_train, upper_bound, axes=list(range(1, x_train.ndim)))
-    x_test = tf.clip_by_norm(x_test, upper_bound, axes=list(range(1, x_train.ndim)))
-    return x_train, x_test, y_train, y_test, upper_bound
 
-
-def load_data_fashion_mnist(cfg):
-    """
-    Loads the FashionMNIST dataset and outputs tuple containing x_train,x_test,y_train,y_test,upper_bound. The upper_bound is computed
-    the clipped dataset.
-
-    Args :
-        cfg : Config object containing the chosen representation allow with the input_clipping factor.
-
-    Returns :
-        x_train (training dataset)
-        y_train (training labels)
-        x_test (testing dataset)
-        y_test (testing labels)
-        upper_bound (float) : Value of the maximum norm of clipped training dataset.
-    """
-    # Load data
-    (x_train, y_train_ord), (x_test, y_test_ord) = fashion_mnist.load_data()
-    # Normalize
-    x_train = np.expand_dims(x_train, -1) / 255
-    x_test = np.expand_dims(x_test, -1) / 255
-    # One hot labels for multiclass classifier
-    y_train = to_categorical(y_train_ord)
-    y_test = to_categorical(y_test_ord)
-    # Get L2 norm upper bound
-    upper_bound = (
-        np.max(tf.reduce_sum(x_train**2, axis=list(range(1, x_train.ndim))) ** 0.5)
-        * cfg.input_clipping
+    ds_test = (
+        ds_test.map(
+            lambda x, y: (
+                tf.cast(x, tf.float32) / 255.0,
+                tf.one_hot(y, nb_classes),
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
+        .map(
+            get_colorspace_function(colorspace),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
+        .shuffle(
+            min(batch_size * 10, max(batch_size, ds_test.cardinality())),
+            reshuffle_each_iteration=True,
+        )
+        .batch(batch_size, drop_remainder=drop_remainder)
+        .prefetch(tf.data.AUTOTUNE)
     )
-    # Clip training and testing set imgs
-    x_train = tf.clip_by_norm(x_train, upper_bound, axes=list(range(1, x_train.ndim)))
-    x_test = tf.clip_by_norm(x_test, upper_bound, axes=list(range(1, x_train.ndim)))
-    return x_train, x_test, y_train, y_test, upper_bound
+    # get dataset metadata
+    metadata = DatasetMetadata(
+        input_shape=ds_info.features["image"].shape,
+        nb_classes=ds_info.features["label"].num_classes,
+        nb_samples_train=ds_info.splits["train"].num_examples,
+        nb_samples_test=ds_info.splits["test"].num_examples,
+        class_names=ds_info.features["label"].names,
+        nb_steps_per_epochs=ds_train.cardinality().numpy()
+        if ds_train.cardinality() > 0  # handle case cardinality return -1 (unknown)
+        else ds_info.splits["train"].num_examples / batch_size,
+        batch_size=batch_size,
+        max_norm=bound_val,
+    )
+
+    return ds_train, ds_test, metadata

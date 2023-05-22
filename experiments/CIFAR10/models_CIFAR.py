@@ -32,17 +32,17 @@ from deel.lipdp.layers import DP_GroupSort
 from deel.lipdp.layers import DP_Lambda
 from deel.lipdp.layers import DP_LayerCentering
 from deel.lipdp.layers import DP_Permute
+from deel.lipdp.layers import DP_QuickSpectralDense
 from deel.lipdp.layers import DP_Reshape
 from deel.lipdp.layers import DP_ScaledGlobalL2NormPooling2D
 from deel.lipdp.layers import DP_ScaledL2NormPooling2D
 from deel.lipdp.layers import DP_SpectralConv2D
-from deel.lipdp.layers import DP_SpectralDense
 from deel.lipdp.layers import make_residuals
 from deel.lipdp.model import DP_Model
 from deel.lipdp.model import DP_Sequential
 
 
-def create_MLP_Mixer(cfg, upper_bound):
+def create_MLP_Mixer(dp_parameters, dataset_metadata, cfg, upper_bound):
     input_shape = (32, 32, 3)
     layers = [DP_BoundedInput(input_shape=input_shape, upper_bound=upper_bound)]
 
@@ -61,16 +61,29 @@ def create_MLP_Mixer(cfg, upper_bound):
     # layers.append(DP_SpectralConv2D(filters=hidden_dim, kernel_size=patch_size, use_bias=False, strides=patch_size, padding="same"))
     seq_len = (input_shape[0] // cfg.patch_size) * (input_shape[1] // cfg.patch_size)
 
-    layers.append(DP_Reshape((seq_len, (cfg.patch_size**2) * input_shape[-1])))
-    layers.append(DP_SpectralDense(units=cfg.hidden_size, use_bias=False))
+    layers.append(DP_Reshape((seq_len, (cfg.patch_size ** 2) * input_shape[-1])))
+    layers.append(
+        DP_QuickSpectralDense(
+            units=cfg.hidden_size, use_bias=False, kernel_initializer="identity"
+        )
+    )
 
     for _ in range(cfg.num_mixer_layers):
         to_add = [
             DP_Permute((2, 1)),
-            DP_SpectralDense(units=cfg.mlp_seq_dim, use_bias=False),
-            DP_LayerCentering(),
-            DP_GroupSort(2),
-            DP_SpectralDense(units=seq_len, use_bias=False),
+            DP_QuickSpectralDense(
+                units=cfg.mlp_seq_dim, use_bias=False, kernel_initializer="identity"
+            ),
+        ]
+        if cfg.add_biases:
+            to_add.append(DP_AddBias())
+        to_add.append(DP_GroupSort(2))
+        if cfg.layer_centering:
+            to_add.append(DP_LayerCentering())
+        to_add += [
+            DP_QuickSpectralDense(
+                units=seq_len, use_bias=False, kernel_initializer="identity"
+            ),
             DP_Permute((2, 1)),
         ]
 
@@ -80,12 +93,20 @@ def create_MLP_Mixer(cfg, upper_bound):
             layers += to_add
 
         to_add = [
-            # channel mixing
-            # TODO: add LayerNorm ?
-            DP_SpectralDense(units=cfg.mlp_channel_dim, use_bias=False),
-            DP_GroupSort(2),
-            DP_SpectralDense(units=cfg.hidden_size, use_bias=False),
+            DP_QuickSpectralDense(
+                units=cfg.mlp_channel_dim, use_bias=False, kernel_initializer="identity"
+            ),
         ]
+        if cfg.add_biases:
+            to_add.append(DP_AddBias())
+        to_add.append(DP_GroupSort(2))
+        if cfg.layer_centering:
+            to_add.append(DP_LayerCentering())
+        to_add.append(
+            DP_QuickSpectralDense(
+                units=cfg.hidden_size, use_bias=False, kernel_initializer="identity"
+            )
+        )
 
         if cfg.skip_connections:
             layers += make_residuals("1-lip-add", to_add)
@@ -95,27 +116,40 @@ def create_MLP_Mixer(cfg, upper_bound):
     # TO REPLACE ?
     # layers.append(DP_LayerCentering())
     layers.append(DP_Flatten())
-    layers.append(DP_SpectralDense(units=10, use_bias=False))
-    layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
-
-    model = DP_Model(
-        layers,
-        cfg=cfg,
-        noisify_strategy=cfg.noisify_strategy,
-        name="mlp_mixer",
+    layers.append(
+        DP_QuickSpectralDense(units=10, use_bias=False, kernel_initializer="identity")
     )
+    if cfg.clip_loss_gradient is not None:
+        layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
+
+    if cfg.skip_connections:
+        model = DP_Model(
+            layers,
+            dp_parameters=dp_parameters,
+            dataset_metadata=dataset_metadata,
+            name="mlp_mixer",
+        )
+    else:
+        model = DP_Sequential(
+            layers,
+            dp_parameters=dp_parameters,
+            dataset_metadata=dataset_metadata,
+            name="mlp_mixer",
+        )
 
     model.build(input_shape=(None, *input_shape))
 
     return model
 
 
-def create_VGG(cfg, upper_bound):
+def create_VGG(dp_parameters, dataset_metadata, cfg, upper_bound):
     depth_conv = dict(VGG5_small=1, VGG5_large=1, VGG8_small=2, VGG8_large=2)
     init_filters = dict(VGG5_small=32, VGG5_large=64, VGG8_small=32, VGG8_large=64)
 
     assert cfg.architecture in depth_conv.keys()
     return VGG_factory(
+        dp_parameters,
+        dataset_metadata,
         cfg,
         depth_conv=depth_conv[cfg.architecture],
         depth_fc=1,
@@ -124,7 +158,15 @@ def create_VGG(cfg, upper_bound):
     )
 
 
-def VGG_factory(cfg, depth_conv, depth_fc, init_filters, upper_bound):
+def VGG_factory(
+    dp_parameters,
+    dataset_metadata,
+    cfg,
+    depth_conv,
+    depth_fc,
+    init_filters,
+    upper_bound,
+):
     """Creates a VGG-like network.
 
     The cfg object must contain some information:
@@ -224,37 +266,49 @@ def VGG_factory(cfg, depth_conv, depth_fc, init_filters, upper_bound):
 
     model = DP_Sequential(
         layers,
-        cfg=cfg,
-        noisify_strategy=cfg.noisify_strategy,
+        dp_parameters=dp_parameters,
+        dataset_metadata=dataset_metadata,
     )
     return model
+
 
 # -------------------------------------------------------------------------
 # ResNet
 # -------------------------------------------------------------------------
-ModelParams = collections.namedtuple(
-    'ModelParams',
-    ['repetitions', 'init_filters'])
+ModelParams = collections.namedtuple("ModelParams", ["repetitions", "init_filters"])
 
 RESNET_MODELS_DICT = {
-    'resnet6a_small': ModelParams((2,), 32),
-    'resnet6a_large': ModelParams((2,), 64),
-    'resnet6b_small': ModelParams((1, 1,), 32),
-    'resnet6b_large': ModelParams((1, 1,), 32),
-    'resnet8_small': ModelParams((1, 1, 1), 32),
-    'resnet8_large': ModelParams((1, 1, 1), 64),
-    'resnet10_small': ModelParams((2, 2), 32),
-    'resnet10_large': ModelParams((2, 2), 64),
+    "resnet6a_small": ModelParams((2,), 32),
+    "resnet6a_large": ModelParams((2,), 64),
+    "resnet6b_small": ModelParams(
+        (
+            1,
+            1,
+        ),
+        32,
+    ),
+    "resnet6b_large": ModelParams(
+        (
+            1,
+            1,
+        ),
+        32,
+    ),
+    "resnet8_small": ModelParams((1, 1, 1), 32),
+    "resnet8_large": ModelParams((1, 1, 1), 64),
+    "resnet10_small": ModelParams((2, 2), 32),
+    "resnet10_large": ModelParams((2, 2), 64),
 }
 
 # Helper function
 def handle_block_names(stage, block):
-    name_base = 'stage{}_unit{}_'.format(stage + 1, block + 1)
-    conv_name = name_base + 'spconv'
-    lc_name = name_base + 'lc'
-    gs_name = name_base + 'gs'
-    pool_name = name_base + 'pool'
+    name_base = "stage{}_unit{}_".format(stage + 1, block + 1)
+    conv_name = name_base + "spconv"
+    lc_name = name_base + "lc"
+    gs_name = name_base + "gs"
+    pool_name = name_base + "pool"
     return conv_name, lc_name, gs_name, pool_name
+
 
 # Residual block
 def residual_conv_block(filters, stage, block):
@@ -278,7 +332,7 @@ def residual_conv_block(filters, stage, block):
                 kernel_initializer="orthogonal",
                 strides=(1, 1),
                 use_bias=False,
-                name=conv_name + "0"
+                name=conv_name + "0",
             )
         ]
 
@@ -292,7 +346,7 @@ def residual_conv_block(filters, stage, block):
             kernel_initializer="orthogonal",
             strides=(1, 1),
             use_bias=False,
-            name=conv_name + "1"
+            name=conv_name + "1",
         ),
         DP_LayerCentering(name=lc_name + "2"),
         DP_GroupSort(2, name=gs_name + "2"),
@@ -302,16 +356,17 @@ def residual_conv_block(filters, stage, block):
             kernel_initializer="orthogonal",
             strides=(1, 1),
             use_bias=False,
-            name=conv_name + "2"
-        )
+            name=conv_name + "2",
+        ),
     ]
 
     # add residual connection
     layers += make_residuals("1-lip-add", to_add)
     return layers
 
+
 # ResNet Builder
-def create_ResNet(cfg, upper_bound):
+def create_ResNet(dp_parameters, dataset_metadata, cfg, upper_bound):
     model_params = RESNET_MODELS_DICT[cfg.architecture]
 
     # CIFAR10
@@ -333,7 +388,7 @@ def create_ResNet(cfg, upper_bound):
             kernel_initializer="orthogonal",
             strides=1,
             use_bias=False,
-            name="conv0"
+            name="conv0",
         ),
         DP_ScaledL2NormPooling2D(pool_size=2, strides=2, name="pool0"),
         DP_LayerCentering(name="lc0"),
@@ -350,14 +405,16 @@ def create_ResNet(cfg, upper_bound):
     layers += [
         DP_ScaledGlobalL2NormPooling2D(name="globalpool1"),
         DP_SpectralDense(classes, use_bias=False, name="fc1"),
-        DP_ClipGradient(cfg.clip_loss_gradient, name="clipgrad")
+        DP_ClipGradient(cfg.clip_loss_gradient, name="clipgrad"),
     ]
 
     model = DP_Model(
         layers,
         cfg=cfg,
+        dp_parameters=dp_parameters,
+        dataset_metadata=dataset_metadata,
         noisify_strategy=cfg.noisify_strategy,
-        name=cfg.architecture
+        name=cfg.architecture,
     )
     model.build(input_shape=(None, *input_shape))
     return model

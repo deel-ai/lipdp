@@ -6,3 +6,4 @@ matplotlib
 pandas
 tensorflow
 tensorflow-privacy
+tensorflow-datasets

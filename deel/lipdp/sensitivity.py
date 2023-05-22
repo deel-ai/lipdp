@@ -48,7 +48,7 @@ def get_max_epochs(epsilon_max, model, epochs_max=1024):
 
     Returns:
         The maximum number of epochs to reach epsilon_max."""
-    steps_per_epoch = math.ceil(model.cfg.N / model.cfg.batch_size)
+    steps_per_epoch = model.dataset_metadata.nb_steps_per_epochs
 
     def fun(epoch):
         if epoch == 0:

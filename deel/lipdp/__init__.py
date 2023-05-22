@@ -44,13 +44,16 @@ from deel.lipdp.layers import (
     DPLayer,
     make_residuals,
 )
-from deel.lipdp.losses import KCosineSimilarity
-from deel.lipdp.model import DP_Model, DP_Sequential, DP_Accountant
-from deel.lipdp.pipeline import (
-    load_data_cifar,
-    load_data_mnist,
-    load_data_fashion_mnist,
+from deel.lipdp.losses import (
+    DP_KCosineSimilarity,
+    DP_MeanAbsoluteError,
+    DP_MulticlassHinge,
+    DP_MulticlassHKR,
+    DP_MulticlassKR,
+    DP_TauCategoricalCrossentropy,
 )
+from deel.lipdp.model import DP_Model, DP_Sequential, DP_Accountant
+from deel.lipdp.pipeline import load_and_prepare_data, bound_clip_value, bound_normalize
 from deel.lipdp.sensitivity import (
     get_max_epochs,
     gradient_norm_check,
