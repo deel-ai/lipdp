@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-# Copyright IRT Antoine de Saint Exupéry et Université Paul Sabatier Toulouse III - All
-# rights reserved. DEEL is a research program operated by IVADO, IRT Saint Exupéry,
-# CRIAQ and ANITI - https://www.deel.ai/
+# Copyright anonymized et anonymized - All
+# rights reserved. anonymized is a research program operated by anonymized, anonymized,
+# anonymized and anonymized - https://www.anonymized.ai/
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -43,10 +43,10 @@ if os.path.exists(req_dev_path):
 readme_path = os.path.join(this_directory, "README.md")
 readme_contents = ""
 if os.path.exists(readme_path):
-    with open(readme_path) as fp:
+    with open(readme_path, encoding="utf8") as fp:
         readme_contents = fp.read().strip()
 
-with open(os.path.join(this_directory, "lipdp/VERSION")) as f:
+with open(os.path.join(this_directory, "lipdp/VERSION"), encoding="utf8") as f:
     version = f.read().strip()
 
 setup(
@@ -55,7 +55,7 @@ setup(
     # Version of the package:
     version=version,
     # Find the package automatically (include everything):
-    packages=find_namespace_packages(include=["deel.*"]),
+    packages=find_namespace_packages(include=["anonymized.*"]),
     package_data={},
     # Author information:
     author="",

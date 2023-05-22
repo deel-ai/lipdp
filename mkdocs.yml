@@ -65,5 +65,5 @@ extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
   - js/custom.js
 
-repo_name: "deel-ai/<libname>"
-repo_url: "https://github.com/deel-ai/<libname>"
+repo_name: "anonymized-ai/lipdp"
+repo_url: "https://github.com/anonymized-ai/lipdp"

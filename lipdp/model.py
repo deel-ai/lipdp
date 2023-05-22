@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-# Copyright IRT Antoine de Saint Exupéry et Université Paul Sabatier Toulouse III - All
-# rights reserved. DEEL is a research program operated by IVADO, IRT Saint Exupéry,
-# CRIAQ and ANITI - https://www.deel.ai/
+# Copyright anonymized et anonymized - All
+# rights reserved. anonymized is a research program operated by anonymized, anonymized,
+# anonymized and anonymized - https://www.anonymized.ai/
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -24,12 +24,12 @@ from dataclasses import dataclass
 
 import numpy as np
 import tensorflow as tf
+from anonymized import lip
 from autodp import mechanism_zoo
 from autodp import transformer_zoo
 from autodp.autodp_core import Mechanism
 from tensorflow import keras
 
-from deel import lip
 from lipdp.layers import DPLayer
 from lipdp.pipeline import DatasetMetadata
 
@@ -324,7 +324,7 @@ class DP_Sequential(lip.model.Sequential):
             debug: bool = False,
             **kwargs,
     ):
-        """Model Class based on the DEEL Sequential model. Only layer from the lipdp.layers module are allowed since
+        """Model Class based on the anonymized Sequential model. Only layer from the lipdp.layers module are allowed since
         the framework assume 1 lipschitz layers.
 
         Args:
@@ -399,7 +399,7 @@ class DP_Model(lip.model.Model):
             debug: bool = False,
             **kwargs,
     ):
-        """Model Class based on the DEEL Sequential model. Only layer from the lipdp.layers module are allowed since
+        """Model Class based on the anonymized Sequential model. Only layer from the lipdp.layers module are allowed since
         the framework assume 1 lipschitz layers.
 
         Args:

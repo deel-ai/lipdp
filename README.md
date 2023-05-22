@@ -1,53 +1,69 @@
-# Purpose of this library :
+<!-- Banner section -->
+<div align="center">
+        <picture>
+                <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/banner_dark.png">
+                <source media="(prefers-color-scheme: light)" srcset="./docs/assets/banner_light.png">
+                <img alt="Library Banner" src="./docs/assets/banner_light.png">
+        </picture>
+</div>
+<br>
+
+<!-- Badge section -->
+<div align="center">
+    <a href="#">
+        <img src="https://img.shields.io/badge/Python-3.6, 3.7, 3.8-efefef">
+    </a>
+    <a href="#">
+        <img src="https://img.shields.io/badge/License-MIT-efefef">
+    </a>
+</div>
+<br>
 
 Conventionally, Differentially Private ML training relies on Gradient Clipping to guarantee verifiable privacy guarantees.
 By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based
 DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
 batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
 
-Therefore, the computation time is heavily reduced and the results on the MNIST and CIFAR10 datasets are the following :
+
+## 📚 Table of contents
+
+- [📚 Table of contents](#-table-of-contents)
+- [🔥 Tutorials](#-tutorials)
+- [🚀 Quick Start](#-quick-start)
+- [📦 What's Included](#-whats-included)
+- [👍 Contributing](#-contributing)
+- [👀 See Also](#-see-also)
+- [🙏 Acknowledgments](#-acknowledgments)
+- [👨‍🎓 Creator](#-creator)
+- [🗞️ Citation](#-citation)
+- [📝 License](#-license)
+
+## 🔥 Tutorials
 
 
-# Status of the repository : 
 
-- ci tests to develop.
-- sensitivity.py to debug.
-- requirements.txt tested on my machine, still to check by someone else.
+## 🚀 Quick Start
 
-# Deel library repository template
+Libname requires some stuff and several libraries including Numpy. Installation can be done using Pypi:
 
-Ce dépôt git sert de template pour les librairies DEEL ayant vocation à être rendues publiques sur github.
-Il donne la structure des répertoires d'un projet telle que celle adoptée par les librairies DEEL déjà publiques.
+```python
+pip install dist/lipdp-0.0.1a0-py2.py3-none-any.whl[dev]
+```
 
-A la racine du projet on trouve:
+Now that lipdp is installed, here are some basic examples of what you can do with the
+ available modules.
 
-- deel : répertoire destiné à recevoir le code de la librairie. C'est le premier mot de l'espaces de nommage de
-        la librairie. Ce n'est pas un module python, il ne contient donc pas de fichier __init__.py.
-        Il contient le module principal de la librairie du nom de cette librairie.
-        
-        Example: 
-        
-        librairie **deel-lip**:
-                    deel/deel-lip       
+## 📦 What's Included
 
-- docs: répertoire destiné à la documentation de la librairie
+Code can be found in the `lipdp` folder, the documentation ca be found by running
+ `mkdocs build` and `mkdocs serve` (or loading `site/index.html`). Experiments were
+  done using the code in the `experiments` folder.
 
-- tests: répertoire des tests unitaires
+## 👍 Contributing
 
-- .pre-commit-config.yaml : configuration de outil de contrôle avant commit (pre-commit)
+Feel free to propose your ideas or come and contribute with us on the Libname toolbox! We have a specific document where we describe in a simple way how to make your first pull request: [just here](CONTRIBUTING.md).
 
-- LICENCE/headers/MIT-Clause.txt : entête licence MIT injectée dans les fichiers du projet
-
-- CONTRIBUTING.md: description de la procédure pour apporter une contribution à la librairie.
-
-- GOUVERNANCE.md: description de la manière dont la librairie est gérée.
-
-- LICENCE : texte de la licence sous laquelle est publiée la librairie (MIT).
-
-- README.md 
-
-
-# pre-commit : Conventional Commits 1.0.0
+### pre-commit : Conventional Commits 1.0.0
 
 The commit message should be structured as follows:
 
@@ -74,129 +90,9 @@ The commit contains the following structural elements, to communicate intent to 
 
 - Additional types are not mandated by the Conventional Commits specification, and have no implicit effect in Semantic Versioning (unless they include a BREAKING CHANGE). A scope may be provided to a commit’s type, to provide additional contextual information and is contained within parenthesis, e.g., feat(parser): add ability to parse arrays.
 
-# README sections
-
-The following should be used as a template for the README of your library. Of course, depending on what you are doing not all sections are necessary but try to keep the order of the sections.
-
-<!-- Banner section -->
-<div align="center">
-        <picture>
-                <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/banner_dark.png">
-                <source media="(prefers-color-scheme: light)" srcset="./docs/assets/banner_light.png">
-                <img alt="Library Banner" src="./docs/assets/banner_light.png">
-        </picture>
-</div>
-<br>
-
-<!-- Badge section -->
-<div align="center">
-    <a href="#">
-        <img src="https://img.shields.io/badge/Python-3.6, 3.7, 3.8-efefef">
-    </a>
-    <a href="#">
-        <img src="https://img.shields.io/badge/License-MIT-efefef">
-    </a>
-</div>
-<br>
-
-<!-- Short description of your library -->
-<p align="center">
-  <b>Libname</b> is a Python toolkit dedicated to make people happy and fun.
-
-  <!-- Link to the documentation -->
-  <br>
-  <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"><strong>Explore Libname docs »</strong></a>
-  <br>
-
-</p>
-
-## 📚 Table of contents
-
-- [📚 Table of contents](#-table-of-contents)
-- [🔥 Tutorials](#-tutorials)
-- [🚀 Quick Start](#-quick-start)
-- [📦 What's Included](#-whats-included)
-- [👍 Contributing](#-contributing)
-- [👀 See Also](#-see-also)
-- [🙏 Acknowledgments](#-acknowledgments)
-- [👨‍🎓 Creator](#-creator)
-- [🗞️ Citation](#-citation)
-- [📝 License](#-license)
-
-## 🔥 Tutorials
-
-We propose some tutorials to get familiar with the library and its api:
-
-- [Getting started](https://colab.research.google.com/drive/1XproaVxXjO9nrBSyyy7BuKJ1vy21iHs2) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/<libname>/blob/master/docs/notebooks/demo_fake.ipynb) </sub>
-
-You do not necessarily need to register the notebooks on the GitHub. Notebooks can be hosted on a specific [drive](https://drive.google.com/drive/folders/1DOI1CsL-m9jGjkWM1hyDZ1vKmSU1t-be).
-
-## 🚀 Quick Start
-
-Libname requires some stuff and several libraries including Numpy. Installation can be done using Pypi:
-
-```python
-pip install libname
-```
-
-Now that Libname is installed, here are some basic examples of what you can do with the available modules.
-
-### Print Hello World
-
-Let's start with a simple example:
-
-```python
-from libname.fake import hello_world
-
-hello_world()
-```
-
-### Make addition
-
-In order to add `a` to `b` you can use:
-
-```python
-from libname.fake import addition
-
-a = 1
-b = 2
-c = addition(a, b)
-```
-
-## 📦 What's Included
-
-A list or table of methods available
-
-## 👍 Contributing
-
-Feel free to propose your ideas or come and contribute with us on the Libname toolbox! We have a specific document where we describe in a simple way how to make your first pull request: [just here](CONTRIBUTING.md).
-
-## 👀 See Also
-
-This library is one approach of many...
-
-Other tools to explain your model include:
-
-- [Random](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
-
-More from the DEEL project:
-
-- [Xplique](https://github.com/deel-ai/xplique) a Python library exclusively dedicated to explaining neural networks.
-- [deel-lip](https://github.com/deel-ai/deel-lip) a Python library for training k-Lipschitz neural networks on TF.
-- [Influenciae](https://github.com/deel-ai/influenciae) Python toolkit dedicated to computing influence values for the discovery of potentially problematic samples in a dataset.
-- [deel-torchlip](https://github.com/deel-ai/deel-torchlip) a Python library for training k-Lipschitz neural networks on PyTorch.
-- [DEEL White paper](https://arxiv.org/abs/2103.10529) a summary of the DEEL team on the challenges of certifiable AI and the role of data quality, representativity and explainability for this purpose.
 
 ## 🙏 Acknowledgments
 
-<div align="right">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://share.deel.ai/apps/theming/image/logo?useSvg=1&v=10"  width="25%" align="right">
-    <source media="(prefers-color-scheme: light)" srcset="https://www.deel.ai/wp-content/uploads/2021/05/logo-DEEL.png"  width="25%" align="right">
-    <img alt="DEEL Logo" src="https://www.deel.ai/wp-content/uploads/2021/05/logo-DEEL.png" width="25%" align="right">
-  </picture>
-</div>
-This project received funding from the French ”Investing for the Future – PIA3” program within the Artificial and Natural Intelligence Toulouse Institute (ANITI). The authors gratefully acknowledge the support of the <a href="https://www.deel.ai/"> DEEL </a> project.
 
 ## 👨‍🎓 Creators
 
@@ -205,16 +101,7 @@ If you want to highlights the main contributors
 
 ## 🗞️ Citation
 
-If you use Libname as part of your workflow in a scientific publication, please consider citing the 🗞️ [our paper](https://www.youtube.com/watch?v=dQw4w9WgXcQ):
 
-```
-@article{rickroll,
-  title={Rickrolling},
-  author={Some Internet Trolls},
-  journal={Best Memes},
-  year={ND}
-}
-```
 
 ## 📝 License
 

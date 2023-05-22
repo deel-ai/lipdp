@@ -1,15 +1,10 @@
-# Index
-
-Mainly you could copy the README.md here. However, you should be careful with:
-
-- The banner section is different
-- Link to assets (handling dark mode is different between GitHub and the documentation)
-- Relative links
-
 <!-- Banner section -->
 <div align="center">
-    <img src="./assets/banner_dark.png#only-dark" width="75%" alt="lib banner" align="center" />
-    <img src="./assets/banner_light.png#only-light" width="75%" alt="lib banner" align="center" />
+        <picture>
+                <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/banner_dark.png">
+                <source media="(prefers-color-scheme: light)" srcset="./docs/assets/banner_light.png">
+                <img alt="Library Banner" src="./docs/assets/banner_light.png">
+        </picture>
 </div>
 <br>
 
@@ -24,16 +19,11 @@ Mainly you could copy the README.md here. However, you should be careful with:
 </div>
 <br>
 
-<!-- Short description of your library -->
-<p align="center">
-  <b>Libname</b> is a Python toolkit dedicated to making people happy and fun.
+Conventionally, Differentially Private ML training relies on Gradient Clipping to guarantee verifiable privacy guarantees.
+By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based
+DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
+batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
 
-  <!-- Link to the documentation -->
-  <br>
-  <a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"><strong>Explore Libname docs »</strong></a>
-  <br>
-
-</p>
 
 ## 📚 Table of contents
 
@@ -50,92 +40,69 @@ Mainly you could copy the README.md here. However, you should be careful with:
 
 ## 🔥 Tutorials
 
-We propose some tutorials to get familiar with the library and its API:
 
-- [Getting started](https://colab.research.google.com/drive/1XproaVxXjO9nrBSyyy7BuKJ1vy21iHs2) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/<libname>/blob/master/docs/notebooks/demo_fake.ipynb) </sub>
-
-You do not necessarily need to register the notebooks on GitHub. Notebooks can be hosted on a specific [drive](https://drive.google.com/drive/folders/1DOI1CsL-m9jGjkWM1hyDZ1vKmSU1t-be).
 
 ## 🚀 Quick Start
 
 Libname requires some stuff and several libraries including Numpy. Installation can be done using Pypi:
 
 ```python
-pip install libname
+pip install dist/lipdp-0.0.1a0-py2.py3-none-any.whl[dev]
 ```
 
-Now that Libname is installed, here are some basic examples of what you can do with the available modules.
-
-### Print Hello World
-
-Let's start with a simple example:
-
-```python
-from libname.fake import hello_world
-
-hello_world()
-```
-
-### Make addition
-
-In order to add `a` to `b` you can use:
-
-```python
-from libname.fake import addition
-
-a = 1
-b = 2
-c = addition(a, b)
-```
+Now that lipdp is installed, here are some basic examples of what you can do with the
+ available modules.
 
 ## 📦 What's Included
 
-A list or table of methods available
+Code can be found in the `lipdp` folder, the documentation ca be found by running
+ `mkdocs build` and `mkdocs serve` (or loading `site/index.html`). Experiments were
+  done using the code in the `experiments` folder.
 
 ## 👍 Contributing
 
 Feel free to propose your ideas or come and contribute with us on the Libname toolbox! We have a specific document where we describe in a simple way how to make your first pull request: [just here](CONTRIBUTING.md).
 
-## 👀 See Also
+### pre-commit : Conventional Commits 1.0.0
 
-This library is one approach of many...
+The commit message should be structured as follows:
 
-Other tools to explain your model include:
+```
+<type>[optional scope]: <description>
 
-- [Random](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
+[optional body]
 
-More from the DEEL project:
+[optional footer(s)]
 
-- [Xplique](https://github.com/deel-ai/xplique) a Python library exclusively dedicated to explaining neural networks.
-- [deel-lip](https://github.com/deel-ai/deel-lip) a Python library for training k-Lipschitz neural networks on TF.
-- [Influenciae](https://github.com/deel-ai/influenciae) Python toolkit dedicated to computing influence values for the discovery of potentially problematic samples in a dataset.
-- [deel-torchlip](https://github.com/deel-ai/deel-torchlip) a Python library for training k-Lipschitz neural networks on PyTorch.
-- [DEEL White paper](https://arxiv.org/abs/2103.10529) a summary of the DEEL team on the challenges of certifiable AI and the role of data quality, representativity and explainability for this purpose.
+```
+
+The commit contains the following structural elements, to communicate intent to the consumers of your library:
+
+- fix: a commit of the type fix patches a bug in your codebase (this correlates with PATCH in Semantic Versioning).
+
+- feat: a commit of the type feat introduces a new feature to the codebase (this correlates with MINOR in Semantic Versioning).
+
+- BREAKING CHANGE: a commit that has a footer BREAKING CHANGE:, or appends a ! after the type/scope, introduces a breaking API change (correlating with MAJOR in Semantic Versioning). A BREAKING CHANGE can be part of commits of any type.
+
+- types other than fix: and feat: are allowed, for example @commitlint/config-conventional (based on the the Angular convention) recommends *build:, chore:, ci:, docs:, style:, refactor:, perf:, test:*, and [others](https://delicious-insights.com/fr/articles/git-hooks-et-commitlint/).
+ 
+- footers other than BREAKING CHANGE: <description> may be provided and follow a convention similar to git trailer format.
+
+- Additional types are not mandated by the Conventional Commits specification, and have no implicit effect in Semantic Versioning (unless they include a BREAKING CHANGE). A scope may be provided to a commit’s type, to provide additional contextual information and is contained within parenthesis, e.g., feat(parser): add ability to parse arrays.
+
 
 ## 🙏 Acknowledgments
 
-<img align="right" src="https://share.deel.ai/apps/theming/image/logo?useSvg=1&v=10#only-dark" width="25%" alt="DEEL Logo" />
-<img align="right" src="https://www.deel.ai/wp-content/uploads/2021/05/logo-DEEL.png#only-light" width="25%" alt="DEEL Logo" />
-This project received funding from the French ”Investing for the Future – PIA3” program within the Artificial and Natural Intelligence Toulouse Institute (ANITI). The authors gratefully acknowledge the support of the <a href="https://www.deel.ai/"> DEEL </a> project.
 
 ## 👨‍🎓 Creators
 
-If you want to highlight the main contributors
+If you want to highlights the main contributors
 
 
 ## 🗞️ Citation
 
-If you use Libname as part of your workflow in a scientific publication, please consider citing 🗞️ [our paper](https://www.youtube.com/watch?v=dQw4w9WgXcQ):
 
-```
-@article{rickroll,
-  title={Rickrolling},
-  author={Some Internet Trolls},
-  journal={Best Memes},
-  year={ND}
-}
-```
 
 ## 📝 License
 
-The package is released under <a href="https://choosealicense.com/licenses/mit"> MIT license</a>.
+The package is released under [MIT license](LICENSE).

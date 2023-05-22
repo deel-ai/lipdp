@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-# Copyright IRT Antoine de Saint Exupéry et Université Paul Sabatier Toulouse III - All
-# rights reserved. DEEL is a research program operated by IVADO, IRT Saint Exupéry,
-# CRIAQ and ANITI - https://www.deel.ai/
+# Copyright anonymized et anonymized - All
+# rights reserved. anonymized is a research program operated by anonymized, anonymized,
+# anonymized and anonymized - https://www.anonymized.ai/
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -23,7 +23,6 @@
 import os
 
 import numpy as np
-import tensorflow as tf
 import wandb
 from absl import app
 from ml_collections import config_dict
