@@ -25,26 +25,7 @@ from os import path
 with open(path.join(path.dirname(__file__), "VERSION")) as f:
     __version__ = f.read().strip()
 
-from deel.lipdp.layers import (
-    DP_ScaledL2NormPooling2D,
-    DP_Flatten,
-    DP_SpectralConv2D,
-    DP_SpectralDense,
-    DP_Reshape,
-    DP_Lambda,
-    DP_Permute,
-    DP_Reshape,
-    DP_GroupSort,
-    DP_InputLayer,
-    DP_BoundedInput,
-    DP_Flatten,
-    DP_ClipGradient,
-    DP_AddBias,
-    DP_LayerCentering,
-    DPLayer,
-    make_residuals,
-)
-from deel.lipdp.losses import (
+from lipdp.losses import (
     DP_KCosineSimilarity,
     DP_MeanAbsoluteError,
     DP_MulticlassHinge,
@@ -52,9 +33,9 @@ from deel.lipdp.losses import (
     DP_MulticlassKR,
     DP_TauCategoricalCrossentropy,
 )
-from deel.lipdp.model import DP_Model, DP_Sequential, DP_Accountant
-from deel.lipdp.pipeline import load_and_prepare_data, bound_clip_value, bound_normalize
-from deel.lipdp.sensitivity import (
+from lipdp.model import DP_Model, DP_Sequential, DP_Accountant
+from lipdp.pipeline import load_and_prepare_data, bound_clip_value, bound_normalize
+from lipdp.sensitivity import (
     get_max_epochs,
     gradient_norm_check,
     check_layer_gradient_norm,

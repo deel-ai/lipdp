@@ -20,20 +20,17 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import tensorflow as tf
 
-from deel.lipdp.layers import DP_AddBias
-from deel.lipdp.layers import DP_BoundedInput
-from deel.lipdp.layers import DP_ClipGradient
-from deel.lipdp.layers import DP_Flatten
-from deel.lipdp.layers import DP_GroupSort
-from deel.lipdp.layers import DP_LayerCentering
-from deel.lipdp.layers import DP_ScaledL2NormPooling2D
-from deel.lipdp.layers import DP_SpectralConv2D
-from deel.lipdp.layers import DP_SpectralDense
-from deel.lipdp.layers import make_residuals
-from deel.lipdp.model import DP_Model
-from deel.lipdp.model import DP_Sequential
+from lipdp.layers import DP_AddBias
+from lipdp.layers import DP_BoundedInput
+from lipdp.layers import DP_ClipGradient
+from lipdp.layers import DP_Flatten
+from lipdp.layers import DP_GroupSort
+from lipdp.layers import DP_LayerCentering
+from lipdp.layers import DP_ScaledL2NormPooling2D
+from lipdp.layers import DP_SpectralConv2D
+from lipdp.layers import DP_SpectralDense
+from lipdp.model import DP_Sequential
 
 
 def create_Dense_Model(cfg, upper_bound):

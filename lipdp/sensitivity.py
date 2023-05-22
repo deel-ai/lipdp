@@ -20,12 +20,11 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import math
 
 import numpy as np
 import tensorflow as tf
 
-from deel.lipdp.model import get_eps_delta
+from lipdp.model import get_eps_delta
 
 
 def get_max_epochs(epsilon_max, model, epochs_max=1024):

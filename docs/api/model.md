@@ -1,4 +1,4 @@
-::: deel.lipdp.model
+::: lipdp.model
     rendering:
         show_root_toc_entry: True
     selection:

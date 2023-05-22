@@ -20,7 +20,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -30,9 +29,9 @@ from autodp import transformer_zoo
 from autodp.autodp_core import Mechanism
 from tensorflow import keras
 
-import deel
-from deel.lipdp.layers import DPLayer
-from deel.lipdp.pipeline import DatasetMetadata
+from deel import lip
+from lipdp.layers import DPLayer
+from lipdp.pipeline import DatasetMetadata
 
 
 @dataclass
@@ -316,14 +315,14 @@ def global_noisify(model, gradient_bounds, trainable_vars, gradients):
     return noisy_grads
 
 
-class DP_Sequential(deel.lip.model.Sequential):
+class DP_Sequential(lip.model.Sequential):
     def __init__(
-        self,
-        *args,
-        dp_parameters: DPParameters,
-        dataset_metadata: DatasetMetadata,
-        debug: bool = False,
-        **kwargs,
+            self,
+            *args,
+            dp_parameters: DPParameters,
+            dataset_metadata: DatasetMetadata,
+            debug: bool = False,
+            **kwargs,
     ):
         """Model Class based on the DEEL Sequential model. Only layer from the lipdp.layers module are allowed since
         the framework assume 1 lipschitz layers.
@@ -390,15 +389,15 @@ class DP_Sequential(deel.lip.model.Sequential):
         return {m.name: m.result() for m in self.metrics}
 
 
-class DP_Model(deel.lip.model.Model):
+class DP_Model(lip.model.Model):
     def __init__(
-        self,
-        dp_layers,
-        *args,
-        dp_parameters: DPParameters,
-        dataset_metadata: DatasetMetadata,
-        debug: bool = False,
-        **kwargs,
+            self,
+            dp_layers,
+            *args,
+            dp_parameters: DPParameters,
+            dataset_metadata: DatasetMetadata,
+            debug: bool = False,
+            **kwargs,
     ):
         """Model Class based on the DEEL Sequential model. Only layer from the lipdp.layers module are allowed since
         the framework assume 1 lipschitz layers.

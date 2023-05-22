@@ -1,4 +1,4 @@
-::: deel.lipdp.losses
+::: lipdp.losses
     rendering:
         show_root_toc_entry: True
     selection:

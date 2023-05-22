@@ -1,4 +1,4 @@
-::: deel.lipdp.layers
+::: lipdp.layers
     rendering:
         show_root_toc_entry: True
     selection:

@@ -24,22 +24,23 @@ import collections
 
 import tensorflow as tf
 
-from deel.lipdp.layers import DP_AddBias
-from deel.lipdp.layers import DP_BoundedInput
-from deel.lipdp.layers import DP_ClipGradient
-from deel.lipdp.layers import DP_Flatten
-from deel.lipdp.layers import DP_GroupSort
-from deel.lipdp.layers import DP_Lambda
-from deel.lipdp.layers import DP_LayerCentering
-from deel.lipdp.layers import DP_Permute
-from deel.lipdp.layers import DP_QuickSpectralDense
-from deel.lipdp.layers import DP_Reshape
-from deel.lipdp.layers import DP_ScaledGlobalL2NormPooling2D
-from deel.lipdp.layers import DP_ScaledL2NormPooling2D
-from deel.lipdp.layers import DP_SpectralConv2D
-from deel.lipdp.layers import make_residuals
-from deel.lipdp.model import DP_Model
-from deel.lipdp.model import DP_Sequential
+from lipdp.layers import DP_AddBias
+from lipdp.layers import DP_BoundedInput
+from lipdp.layers import DP_ClipGradient
+from lipdp.layers import DP_Flatten
+from lipdp.layers import DP_GroupSort
+from lipdp.layers import DP_Lambda
+from lipdp.layers import DP_LayerCentering
+from lipdp.layers import DP_Permute
+from lipdp.layers import DP_QuickSpectralDense
+from lipdp.layers import DP_Reshape
+from lipdp.layers import DP_ScaledGlobalL2NormPooling2D
+from lipdp.layers import DP_ScaledL2NormPooling2D
+from lipdp.layers import DP_SpectralConv2D
+from lipdp.layers import DP_SpectralDense
+from lipdp.layers import make_residuals
+from lipdp.model import DP_Model
+from lipdp.model import DP_Sequential
 
 
 def create_MLP_Mixer(dp_parameters, dataset_metadata, cfg, upper_bound):

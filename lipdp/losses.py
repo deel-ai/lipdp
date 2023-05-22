@@ -23,12 +23,8 @@
 import math
 
 import tensorflow as tf
+from deel.lip import losses
 from tensorflow.python.keras.losses import Loss
-
-from deel.lip.losses import MulticlassHinge
-from deel.lip.losses import MulticlassHKR
-from deel.lip.losses import MulticlassKR
-from deel.lip.losses import TauCategoricalCrossentropy
 
 
 class DP_Loss(Loss):
@@ -62,12 +58,12 @@ class DP_KCosineSimilarity(DP_Loss):
         return 1 / float(self.K)
 
 
-class DP_TauCategoricalCrossentropy(TauCategoricalCrossentropy, DP_Loss):
+class DP_TauCategoricalCrossentropy(losses.TauCategoricalCrossentropy, DP_Loss):
     def __init__(
-        self,
-        tau,
-        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
-        name="TauCategoricalCrossentropy",
+            self,
+            tau,
+            reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+            name="TauCategoricalCrossentropy",
     ):
         """
         Similar to original categorical crossentropy, but with a settable temperature
@@ -88,13 +84,13 @@ class DP_TauCategoricalCrossentropy(TauCategoricalCrossentropy, DP_Loss):
         return math.sqrt(2)
 
 
-class DP_MulticlassHKR(MulticlassHKR, DP_Loss):
+class DP_MulticlassHKR(losses.MulticlassHKR, DP_Loss):
     def __init__(
-        self,
-        alpha=10.0,
-        min_margin=1.0,
-        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
-        name="MulticlassHKR",
+            self,
+            alpha=10.0,
+            min_margin=1.0,
+            reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+            name="MulticlassHKR",
     ):
         """
         The multiclass version of HKR. This is done by computing the HKR term over each
@@ -128,12 +124,12 @@ class DP_MulticlassHKR(MulticlassHKR, DP_Loss):
         return self.alpha + 1.0
 
 
-class DP_MulticlassHinge(MulticlassHinge, DP_Loss):
+class DP_MulticlassHinge(losses.MulticlassHinge, DP_Loss):
     def __init__(
-        self,
-        min_margin=1.0,
-        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
-        name="MulticlassHinge",
+            self,
+            min_margin=1.0,
+            reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+            name="MulticlassHinge",
     ):
         """
         Loss to estimate the Hinge loss in a multiclass setup. It computes the
@@ -160,11 +156,11 @@ class DP_MulticlassHinge(MulticlassHinge, DP_Loss):
         return 1.0
 
 
-class DP_MulticlassKR(MulticlassKR, DP_Loss):
+class DP_MulticlassKR(losses.MulticlassKR, DP_Loss):
     def __init__(
-        self,
-        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
-        name="MulticlassKR",
+            self,
+            reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+            name="MulticlassKR",
     ):
         r"""
         Loss to estimate average of Wasserstein-1 distance using Kantorovich-Rubinstein

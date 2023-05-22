@@ -24,7 +24,6 @@
 import os
 
 from setuptools import find_namespace_packages
-from setuptools import find_packages
 from setuptools import setup
 
 this_directory = os.path.dirname(__file__)
@@ -47,7 +46,7 @@ if os.path.exists(readme_path):
     with open(readme_path) as fp:
         readme_contents = fp.read().strip()
 
-with open(os.path.join(this_directory, "deel/lipdp/VERSION")) as f:
+with open(os.path.join(this_directory, "lipdp/VERSION")) as f:
     version = f.read().strip()
 
 setup(

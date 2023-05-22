@@ -25,23 +25,22 @@ import os
 import numpy as np
 import tensorflow as tf
 import wandb
-import yaml
 from absl import app
 from ml_collections import config_dict
 from ml_collections import config_flags
 from models_CIFAR import create_MLP_Mixer
-from models_CIFAR import create_VGG
 from models_CIFAR import create_ResNet
+from models_CIFAR import create_VGG
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from wandb.keras import WandbCallback
 
-from deel.lipdp.losses import *
-from deel.lipdp.model import DP_Accountant
-from deel.lipdp.model import DPParameters
-from deel.lipdp.pipeline import bound_clip_value
-from deel.lipdp.pipeline import load_and_prepare_data
-from deel.lipdp.sensitivity import get_max_epochs
+from lipdp.losses import *
+from lipdp.model import DPParameters
+from lipdp.model import DP_Accountant
+from lipdp.pipeline import bound_clip_value
+from lipdp.pipeline import load_and_prepare_data
+from lipdp.sensitivity import get_max_epochs
 from wandb_sweeps.src_config.wandb_utils import init_wandb
 from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 

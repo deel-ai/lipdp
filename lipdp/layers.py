@@ -25,7 +25,7 @@ from abc import abstractmethod
 import numpy as np
 import tensorflow as tf
 
-import deel.lip
+from deel import lip
 
 
 class DPLayer:
@@ -113,11 +113,11 @@ DP_Reshape = DP_GNP_Factory(tf.keras.layers.Reshape)
 DP_Lambda = DP_GNP_Factory(tf.keras.layers.Lambda)
 DP_Permute = DP_GNP_Factory(tf.keras.layers.Permute)
 DP_Flatten = DP_GNP_Factory(tf.keras.layers.Flatten)
-DP_GroupSort = DP_GNP_Factory(deel.lip.activations.GroupSort)
+DP_GroupSort = DP_GNP_Factory(lip.activations.GroupSort)
 DP_ReLU = DP_GNP_Factory(tf.keras.layers.ReLU)
 DP_InputLayer = DP_GNP_Factory(tf.keras.layers.InputLayer)
 DP_ScaledGlobalL2NormPooling2D = DP_GNP_Factory(
-    deel.lip.layers.ScaledGlobalL2NormPooling2D
+    lip.layers.ScaledGlobalL2NormPooling2D
 )
 
 
@@ -150,7 +150,7 @@ class DP_MaxPool2D(tf.keras.layers.MaxPool2D, DPLayer):
         return False
 
 
-class DP_ScaledL2NormPooling2D(deel.lip.layers.ScaledL2NormPooling2D, DPLayer):
+class DP_ScaledL2NormPooling2D(lip.layers.ScaledL2NormPooling2D, DPLayer):
     """Max pooling layer that preserves the gradient norm.
 
     Args:
@@ -297,7 +297,7 @@ class DP_LayerCentering(LayerCentering, DPLayer):
         return False
 
 
-class DP_SpectralDense(deel.lip.layers.SpectralDense, DPLayer):
+class DP_SpectralDense(lip.layers.SpectralDense, DPLayer):
     def __init__(self, *args, nm_coef=1, **kwargs):
         if "use_bias" in kwargs and kwargs["use_bias"]:
             raise ValueError("No bias allowed.")
@@ -345,7 +345,7 @@ class DP_QuickSpectralDense(tf.keras.layers.Dense, DPLayer):
         return True
 
 
-class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
+class DP_SpectralConv2D(lip.layers.SpectralConv2D, DPLayer):
     def __init__(self, *args, nm_coef=1, **kwargs):
         if "use_bias" in kwargs and kwargs["use_bias"]:
             raise ValueError("No bias allowed.")
@@ -355,7 +355,7 @@ class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
 
     def backpropagate_params(self, input_bound, gradient_bound):
         return (
-            self._get_coef()
+                self._get_coef()
             * np.sqrt(np.prod(self.kernel_size))
             * input_bound
             * gradient_bound

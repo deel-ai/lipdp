@@ -1,4 +1,4 @@
-::: deel.lipdp.pipeline
+::: lipdp.pipeline
     rendering:
         show_root_toc_entry: True
     selection:

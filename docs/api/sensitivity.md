@@ -1,4 +1,4 @@
-::: deel.lipdp.sensitivity
+::: lipdp.sensitivity
     rendering:
         show_root_toc_entry: True
     selection:
