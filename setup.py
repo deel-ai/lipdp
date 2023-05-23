@@ -23,7 +23,7 @@
 # -*- encoding: utf-8 -*-
 import os
 
-from setuptools import find_namespace_packages
+from setuptools import find_packages
 from setuptools import setup
 
 this_directory = os.path.dirname(__file__)
@@ -55,8 +55,10 @@ setup(
     # Version of the package:
     version=version,
     # Find the package automatically (include everything):
-    packages=find_namespace_packages(include=["anonymized.*"]),
-    package_data={},
+    packages=find_packages(),
+    package_data={'': ['VERSION']},
+    include_package_data=True,
+    # Author information:
     # Author information:
     author="",
     author_email="",
