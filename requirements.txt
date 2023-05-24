@@ -2,8 +2,5 @@ scipy<=1.9.3
 autodp
 numpy
 deel-lip
-matplotlib
-pandas
 tensorflow
-tensorflow-privacy
 tensorflow-datasets

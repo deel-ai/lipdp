@@ -4,13 +4,13 @@ Thanks for taking the time to contribute!
 
 From opening a bug report to creating a pull request: every contribution is
 appreciated and welcome. If you're planning to implement a new feature or change
-the api please create an [issue first](https://https://github.com/anonymized-ai/dp-lipschitz/issues/new). This way we can ensure that your precious
+the api please create an [issue first](https://https://github.com/anonymized/dp-lipschitz/issues/new). This way we can ensure that your precious
 work is not in vain.
 
 
 ## Setup with make
 
-- Clone the repo `git clone https://github.com/anonymized-ai/dp-lipschitz.git`.
+- Clone the repo `git clone https://github.com/anonymized/dp-lipschitz.git`.
 - Go to your freshly downloaded repo `cd lipdp`
 - Create a virtual environment and install the necessary dependencies for development:
 
