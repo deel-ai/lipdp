@@ -1,6 +1,6 @@
 # GOVERNANCE
 
-`lipdp` is developped as part of the Artificial and Natural Intelligence Toulouse Institute (anonymized/anonymized) program.
+`lipdp` is developped as part of the anonymized (anonymized/anonymized) program.
 
 anonymized/anonymized is this repository owner and the write rights manager.
 
