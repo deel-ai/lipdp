@@ -66,9 +66,20 @@ model = DP_Sequential(
         layers.DP_BoundedInput(
             input_shape=dataset_metadata.input_shape, upper_bound=input_upper_bound
         ),
+        layers.DP_SpectralConv2D(
+            filters=16,
+            kernel_size=3,
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,
+        ),
+        layers.DP_GroupSort(2),
+        layers.DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
+        layers.DP_LayerCentering(),
         layers.DP_Flatten(),
         layers.DP_SpectralDense(512),
         layers.DP_GroupSort(),
+        layers.DP_LayerCentering(),
         layers.DP_SpectralDense(dataset_metadata.nb_classes),
     ],
     dp_parameters=dp_parameters,
@@ -77,7 +88,7 @@ model = DP_Sequential(
 
 model.compile(
     # Compile model using DP loss
-    loss=losses.DP_TauCategoricalCrossentropy(128.0),
+    loss=losses.DP_TauCategoricalCrossentropy(18.0),
     # this method is compatible with any first order optimizer
     optimizer=tf.keras.optimizers.Adam(learning_rate=5e-4),
     metrics=["accuracy"],

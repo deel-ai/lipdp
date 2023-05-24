@@ -24,7 +24,7 @@ from abc import abstractmethod
 
 import numpy as np
 import tensorflow as tf
-from anonymized import lip
+from deel import lip
 
 
 class DPLayer:

@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import tensorflow as tf
-from anonymized import lip
+from deel import lip
 from autodp import mechanism_zoo
 from autodp import transformer_zoo
 from autodp.autodp_core import Mechanism
