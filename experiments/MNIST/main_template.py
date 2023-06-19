@@ -26,7 +26,6 @@ import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import wandb
 import yaml
 from absl import app
 from absl import flags
@@ -39,15 +38,16 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Input
-from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 
+import wandb
 from deel.lipdp.losses import *
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DPParameters
 from deel.lipdp.pipeline import bound_clip_value
 from deel.lipdp.pipeline import load_and_prepare_data
 from deel.lipdp.sensitivity import get_max_epochs
+from wandb.keras import WandbCallback
+from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.wandb_utils import init_wandb
 from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
@@ -207,6 +207,7 @@ def train():
 
 def main(_):
     run_with_wandb(cfg=cfg, train_function=train, project="MNIST_ClipLess_SGD")
+
 
 if __name__ == "__main__":
     app.run(main)

@@ -162,6 +162,7 @@ def load_and_prepare_data(
             get_colorspace_function(colorspace),
             num_parallel_calls=tf.data.AUTOTUNE,
         )
+        .map(bound_callable, num_parallel_calls=tf.data.AUTOTUNE)  # apply bound
         .shuffle(
             min(batch_size * 10, max(batch_size, ds_test.cardinality())),
             reshuffle_each_iteration=True,

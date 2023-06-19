@@ -37,6 +37,7 @@ from deel.lipdp.layers import DP_Reshape
 from deel.lipdp.layers import DP_ScaledGlobalL2NormPooling2D
 from deel.lipdp.layers import DP_ScaledL2NormPooling2D
 from deel.lipdp.layers import DP_SpectralConv2D
+from deel.lipdp.layers import DP_SpectralDense
 from deel.lipdp.layers import make_residuals
 from deel.lipdp.model import DP_Model
 from deel.lipdp.model import DP_Sequential
@@ -61,7 +62,7 @@ def create_MLP_Mixer(dp_parameters, dataset_metadata, cfg, upper_bound):
     # layers.append(DP_SpectralConv2D(filters=hidden_dim, kernel_size=patch_size, use_bias=False, strides=patch_size, padding="same"))
     seq_len = (input_shape[0] // cfg.patch_size) * (input_shape[1] // cfg.patch_size)
 
-    layers.append(DP_Reshape((seq_len, (cfg.patch_size ** 2) * input_shape[-1])))
+    layers.append(DP_Reshape((seq_len, (cfg.patch_size**2) * input_shape[-1])))
     layers.append(
         DP_QuickSpectralDense(
             units=cfg.hidden_size, use_bias=False, kernel_initializer="identity"
@@ -300,6 +301,7 @@ RESNET_MODELS_DICT = {
     "resnet10_large": ModelParams((2, 2), 64),
 }
 
+
 # Helper function
 def handle_block_names(stage, block):
     name_base = "stage{}_unit{}_".format(stage + 1, block + 1)
@@ -398,7 +400,7 @@ def create_ResNet(dp_parameters, dataset_metadata, cfg, upper_bound):
     # resnet body
     for stage, rep in enumerate(model_params.repetitions):
         for block in range(rep):
-            filters = init_filters * (2 ** stage)
+            filters = init_filters * (2**stage)
             layers += residual_conv_block(filters, stage, block)
 
     # resnet top

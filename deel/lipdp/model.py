@@ -21,18 +21,159 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import math
+import random
 from dataclasses import dataclass
 
 import numpy as np
 import tensorflow as tf
+import tensorflow_datasets as tfds
 from autodp import mechanism_zoo
 from autodp import transformer_zoo
 from autodp.autodp_core import Mechanism
 from tensorflow import keras
 
 import deel
+from deel.lipdp.layers import DP_ClipGradient
 from deel.lipdp.layers import DPLayer
 from deel.lipdp.pipeline import DatasetMetadata
+
+
+def clipsum(norms, C):
+    """
+    Computes the sum of individually clipped elements from the given list or tensor.
+
+    Args:
+        norms (list or tensor): A list or tensor containing the elements to be clipped and summed.
+        C (float): A clipping constant used to clip the elements.
+
+    Returns:
+        float: The sum of the clipped elements.
+
+    Example:
+        >>> norms = [1.3, 2.7, 7.5]
+        >>> C = 3.0
+        >>> clipsum(norms, C)
+        7.0
+    """
+    norms = tf.cast(norms, dtype=tf.float32)
+    C = tf.constant([C])
+    C = tf.cast(C, dtype=tf.float32)
+    return tf.math.reduce_sum(tf.math.minimum(norms, C))
+
+
+def diff_query(norms, lower, upper, n_points=1000):
+    """
+    Computes the difference between two sums of clipped elements with two different clipping constants
+    on a range of n_points between the lower and upper values.
+
+    Args:
+        norms (list or tensor): A list or tensor of values to be clipped and summed.
+        lower (float or int): The lower bound of the search range.
+        upper (float or int): The upper bound of the search range.
+        n_points (int): The number of points between the lower and upper bound.
+
+    Returns:
+        alpha (float): The sensitivity of the differentiation query, calculated as (upper - lower) / (n_points - 1).
+        points (list): The list of points iterated on between the lower and upper bound.
+        queries (float): The values of the difference query over the points range.
+
+    """
+    points = np.linspace(lower, upper, num=n_points)
+    alpha = (upper - lower) / (n_points - 1)
+    queries = []
+    for p in points:
+        query = clipsum(norms, p) - clipsum(norms, p + alpha)
+        queries.append(query)
+    return alpha, points, queries
+
+
+def above_treshold(queries, sensitivity, T, epsilon):
+    """
+    SVT inspired algorithm inspired from https://programming-dp.com/ch10.html. Computes
+    the index for which the differentiation query of the queries list converges above a
+    treshold T. This computation is epsilon-DP.
+
+    Args :
+        queries (list or tensor) : list of the values of the difference query.
+        sensitivity (float) : sensitivity of the difference computation query.
+        T (float) : value of the treshold.
+        epsilon (float) : chosen epsilon guarantee on the query.
+
+    Returns :
+        ids (int) : the index corresponding the epsilon-DP estimated optimal clipping constant.
+
+    """
+    T_hat = T + np.random.laplace(loc=0, scale=2 * sensitivity / epsilon)
+    for idx, q in enumerate(queries):
+        nu_i = np.random.laplace(loc=0, scale=4 * sensitivity / epsilon)
+        if q + nu_i >= T_hat:
+            return idx
+    return random.randint(0, len(queries) - 1)
+
+
+class AdaptiveLossGradientClipping(keras.callbacks.Callback):
+    """
+    This callback privately updates the clipping value of the last layer of the model
+    if the last layer of the model is a DP_ClipGradient layer with mode = "dynamic_svt".
+
+    Args :
+        ds_train : a tensorflow dataset object.
+
+    """
+
+    def __init__(self, ds_train=None):
+        self.ds_train = ds_train
+
+    def on_train_begin(self, logs=None):
+        # Check that callback is called on a model with a clipping layer at the end
+        assert isinstance(self.model.layers_backward_order()[0], DP_ClipGradient)
+        print("On train begin : ")
+        self.model.layers_backward_order()[0].initial_value = tf.convert_to_tensor(
+            self.model.loss.get_L(), dtype=tf.float32
+        )
+        print(
+            "Initial value is now equal to lipschitz constant of loss: ",
+            self.model.layers_backward_order()[0].initial_value,
+        )
+        self.model.layers_backward_order()[0].clip_value.assign(
+            tf.convert_to_tensor(self.model.loss.get_L(), dtype=tf.float32)
+        )
+        return
+
+    def on_epoch_end(self, epoch, logs={}):
+        last_layer = self.model.layers_backward_order()[0]
+        assert isinstance(last_layer, DP_ClipGradient)
+        # print("Patience : ", epoch % last_layer.patience)
+        if last_layer.mode == "fixed":
+            raise TypeError(
+                "Fixed mode for last layer is incompatible with this callback"
+            )
+        if epoch % last_layer.patience == 0:
+            epsilon = last_layer.epsilon
+            list_norms = self.get_gradloss()
+            alpha, points, queries = diff_query(
+                list_norms, lower=0, upper=self.model.loss.get_L()
+            )
+            T = queries[0] * 0.1
+            updated_clip_value = points[
+                above_treshold(queries, sensitivity=alpha, T=T, epsilon=epsilon)
+            ]
+            print("updated_clip_value : ", updated_clip_value)
+            self.model.layers_backward_order()[0].clip_value.assign(updated_clip_value)
+            return
+
+    def get_gradloss(self):
+        batch = next(iter(self.ds_train.take(1)))
+        imgs, labels = batch
+        self.model.loss.reduction = tf.keras.losses.Reduction.NONE
+        predictions = self.model(imgs)
+        with tf.GradientTape() as tape:
+            tape.watch(predictions)
+            loss_value = self.model.compiled_loss(labels, predictions)
+        self.model.loss.reduction = tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
+        grad_loss = tape.gradient(loss_value, predictions)
+        norms = tf.norm(grad_loss, axis=-1)
+        return norms
 
 
 @dataclass
@@ -43,7 +184,18 @@ class DPParameters:
 
 
 class Global_DPGD_Mechanism(Mechanism):
-    def __init__(self, prob, sigma, niter, delta, name="Layer_DPGD"):
+    def __init__(
+        self,
+        prob,
+        sigma,
+        niter,
+        delta,
+        dynamic_clipping,
+        epsilon_clipping,
+        patience,
+        epochs,
+        name="Layer_DPGD",
+    ):
         # Init
         Mechanism.__init__(self)
         self.name = name
@@ -55,8 +207,19 @@ class Global_DPGD_Mechanism(Mechanism):
             model_mech, prob, improved_bound_flag=True
         )
         compose = transformer_zoo.Composition()
-        global_mech = compose([SubsampledModelGaussian_mech], [niter])
 
+        if (dynamic_clipping is None) or (dynamic_clipping == "fixed"):
+            global_mech = compose([SubsampledModelGaussian_mech], [niter])
+        elif dynamic_clipping == "dynamic_svt":
+            DynamicClippingMech = mechanism_zoo.PureDP_Mechanism(
+                eps=epsilon_clipping, name="SVT"
+            )
+            global_mech = compose(
+                [SubsampledModelGaussian_mech, DynamicClippingMech],
+                [niter, epochs // patience],
+            )
+        else:
+            raise ValueError("Unknow value of dynamic clipping")
         # Get relevant information
         self.epsilon = global_mech.get_approxDP(delta=delta)
         self.delta = delta
@@ -67,7 +230,18 @@ class Global_DPGD_Mechanism(Mechanism):
 
 
 class Local_DPGD_Mechanism(Mechanism):
-    def __init__(self, prob, sigmas, niter, delta, name="Layer_DPGD"):
+    def __init__(
+        self,
+        prob,
+        sigmas,
+        niter,
+        delta,
+        dynamic_clipping,
+        epsilon_clipping,
+        patience,
+        epochs,
+        name="Layer_DPGD",
+    ):
         # Init
         Mechanism.__init__(self)
         self.name = name
@@ -95,7 +269,19 @@ class Local_DPGD_Mechanism(Mechanism):
 
         # Accounting for niter iterations
         compose = transformer_zoo.Composition()
-        global_mech = compose([SubsampledGaussian_mech], [niter])
+
+        if (dynamic_clipping is None) or (dynamic_clipping == "fixed"):
+            global_mech = compose([SubsampledGaussian_mech], [niter])
+        elif dynamic_clipping == "dynamic_svt":
+            DynamicClippingMech = mechanism_zoo.PureDP_Mechanism(
+                eps=epsilon_clipping, name="SVT"
+            )
+            global_mech = compose(
+                [SubsampledGaussian_mech, DynamicClippingMech],
+                [niter, epochs // patience],
+            )
+        else:
+            raise ValueError("Unknow value of dynamic clipping")
 
         # Get relevant information
         self.epsilon = global_mech.get_approxDP(delta=delta)
@@ -137,31 +323,56 @@ class DP_Accountant(keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         niter = (epoch + 1) * self.model.dataset_metadata.nb_steps_per_epochs
-        epsilon, delta = get_eps_delta(model=self.model, niter=niter)
+        epsilon, delta = get_eps_delta(model=self.model, niter=niter, epochs=epoch + 1)
         print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
         # plot epoch at the same time as epsilon and delta to ease comparison of plots in wandb API.
         self.log_fn({"epsilon": epsilon, "delta": delta, "epoch": epoch + 1})
 
 
-def get_eps_delta(model, niter):
+def get_eps_delta(model, niter, epochs):
     prob = model.dataset_metadata.batch_size / model.dataset_metadata.nb_samples_train
     # nm_coefs.values are in the right order because:
     # since Python 3.6 dictionaries are ordered by insertion order - this is an implementation detail and not guaranteed by the language spec.
     # since Python 3.7 dictionaries are ordered by insertion order - this is guaranteed by the language spec.
     if model.dp_parameters.noisify_strategy == "local":
         nm_coefs = get_noise_multiplier_coefs(model)
+        # Get noise multipliers :
         sigmas = [
             model.dp_parameters.noise_multiplier * coef for coef in nm_coefs.values()
         ]
+        # TODO : Check if callback is executed, not only if last layer is of type ClipGradient
+        last_layer = model.layers_backward_order()[0]
+        dynamic_clipping = None
+        if isinstance(last_layer, deel.lipdp.layers.DP_ClipGradient):
+            dynamic_clipping = last_layer.mode
+            epsilon_clipping = last_layer.epsilon
+            patience = last_layer.patience
         mech = Local_DPGD_Mechanism(
-            prob=prob, sigmas=sigmas, delta=model.dp_parameters.delta, niter=niter
+            prob=prob,
+            sigmas=sigmas,
+            delta=model.dp_parameters.delta,
+            niter=niter,
+            dynamic_clipping=dynamic_clipping,
+            epsilon_clipping=epsilon_clipping,
+            patience=patience,
+            epochs=epochs,
         )
     if model.dp_parameters.noisify_strategy == "global":
+        last_layer = model.layers_backward_order()[0]
+        dynamic_clipping = None
+        if isinstance(last_layer, deel.lipdp.layers.DP_ClipGradient):
+            dynamic_clipping = last_layer.mode
+            epsilon_clipping = last_layer.epsilon
+            patience = last_layer.patience
         mech = Global_DPGD_Mechanism(
             prob=prob,
             sigma=model.dp_parameters.noise_multiplier,
             delta=model.dp_parameters.delta,
             niter=niter,
+            dynamic_clipping=dynamic_clipping,
+            epsilon_clipping=epsilon_clipping,
+            patience=patience,
+            epochs=epochs,
         )
     return mech.epsilon, mech.delta
 
@@ -218,7 +429,9 @@ def compute_gradient_bounds(model):
         print(f"Layer {layer.name} input bound: {input_bound}")
 
     # since we aggregate using SUM_OVER_BATCH
-    gradient_bound = model.loss.get_L() / model.dataset_metadata.batch_size
+    gradient_bound = tf.convert_to_tensor(model.loss.get_L()) / tf.convert_to_tensor(
+        model.dataset_metadata.batch_size, dtype=tf.float32
+    )
 
     # Backward pass to compute gradient norm bounds and accumulate Lip constant
     for layer in model.layers_backward_order():
@@ -295,8 +508,8 @@ def global_noisify(model, gradient_bounds, trainable_vars, gradients):
     Returns:
         noisy_grads: list of noisy gradients. The list is in the same order as trainable_vars.
     """
-    global_sensitivity = np.sqrt(
-        sum([bound**2 for bound in gradient_bounds.values()])
+    global_sensitivity = tf.math.sqrt(
+        tf.math.reduce_sum([bound**2 for bound in gradient_bounds.values()])
     )
     stddev = model.dp_parameters.noise_multiplier * global_sensitivity
     noises = [tf.random.normal(shape=tf.shape(g), stddev=stddev) for g in gradients]
