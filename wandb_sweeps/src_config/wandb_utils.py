@@ -23,9 +23,10 @@
 import os
 from typing import Callable
 
-import wandb
 import yaml
 from ml_collections.config_dict import ConfigDict
+
+import wandb
 
 
 def init_wandb(cfg: ConfigDict, project: str):
@@ -42,8 +43,7 @@ def init_wandb(cfg: ConfigDict, project: str):
 
 
 def run_with_wandb(cfg: ConfigDict, train_function: Callable, project: str):
-    """Run an individual run or a sweep.
-    """
+    """Run an individual run or a sweep."""
     wandb.login()
     # indivudal run
     if cfg.log_wandb in ["run", "disabled"]:
@@ -61,13 +61,12 @@ def run_with_wandb(cfg: ConfigDict, train_function: Callable, project: str):
             sweep_id = wandb.sweep(sweep=sweep_config, project=project)
         else:
             sweep_id = cfg.sweep_id
-        wandb.agent(sweep_id, function=train_function, project=project,
-                    count=cfg.opt_iterations)
+        wandb.agent(
+            sweep_id, function=train_function, project=project, count=cfg.opt_iterations
+        )
 
 
-def _sanitize_sweep_config_from_cfg(
-    sweep_config: dict, cfg: ConfigDict
-) -> dict:
+def _sanitize_sweep_config_from_cfg(sweep_config: dict, cfg: ConfigDict) -> dict:
     """
     Name the sweep config and add default values for unspecified parameters.
     """
@@ -116,18 +115,11 @@ def _get_default_sweep_config(cfg):
     }
 
     common_hyper_parameters = {
-        "input_clipping": {
-            "max": 1.0,
-            "min": 0.1,
+        "input_bound": {
+            "max": 200.0,
+            "min": 0.01,
             "distribution": "log_uniform_values",
         },
-        "clip_loss_gradient": {
-            "max": 10.0,
-            "min": 1e-6,
-            "distribution": "log_uniform_values",
-        },
-        "batch_size": {"values": [5_000, 10_000], "distribution": "categorical"},
-        "add_biases": {"values": [True, False], "distribution": "categorical"},
     }
 
     learning_rate_SGD = {
@@ -146,39 +138,14 @@ def _get_default_sweep_config(cfg):
         },
     }
 
-    if cfg.loss == "MulticlassHinge":
+    if cfg.loss == "TauCategoricalCrossentropy":
         parameters_loss = {
-            "min_margin": {
-                "max": 3.0,
-                "min": 0.001,
-                "distribution": "log_uniform_values",
-            },
-        }
-
-    elif cfg.loss == "MulticlassHKR":
-        parameters_loss = {
-            "alpha": {"max": 2000.0, "min": 0.01, "distribution": "log_uniform_values"},
-            "min_margin": {
-                "max": 1.0,
-                "min": 0.001,
-                "distribution": "log_uniform_values",
-            },
-        }
-
-    elif cfg.loss == "MulticlassKR":
-        parameters_loss = {}
-
-    elif cfg.loss == "MAE":
-        parameters_loss = {}
-
-    elif cfg.loss == "TauCategoricalCrossentropy":
-        parameters_loss = {
-            "tau": {"max": 18.0, "min": 0.001, "distribution": "log_uniform_values"},
+            "tau": {"max": 200.0, "min": 0.001, "distribution": "log_uniform_values"},
         }
 
     elif cfg.loss == "KCosineSimilarity":
         parameters_loss = {
-            "K": {"max": 1.0, "min": 0.01, "distribution": "log_uniform_values"},
+            "K": {"max": 200.0, "min": 0.001, "distribution": "log_uniform_values"},
         }
 
     else:

@@ -42,7 +42,7 @@ class DP_KCosineSimilarity(DP_Loss):
         self,
         K=1.0,
         axis=-1,
-        reduction=tf.keras.losses.Reduction.AUTO,
+        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
         name="cosine_similarity",
     ):
         super().__init__(reduction=reduction, name=name)

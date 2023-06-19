@@ -24,172 +24,199 @@ import os
 
 import numpy as np
 import tensorflow as tf
-import wandb
 import yaml
 from absl import app
 from ml_collections import config_dict
 from ml_collections import config_flags
 from models_CIFAR import create_MLP_Mixer
-from models_CIFAR import create_VGG
 from models_CIFAR import create_ResNet
+from models_CIFAR import create_VGG
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
-from wandb.keras import WandbCallback
 
-from deel.lipdp.losses import *
+import deel.lipdp.layers as DP_layers
+import wandb
+from deel.lipdp import losses
+from deel.lipdp.model import AdaptiveLossGradientClipping
 from deel.lipdp.model import DP_Accountant
+from deel.lipdp.model import DP_Model
 from deel.lipdp.model import DPParameters
 from deel.lipdp.pipeline import bound_clip_value
 from deel.lipdp.pipeline import load_and_prepare_data
 from deel.lipdp.sensitivity import get_max_epochs
+from wandb.keras import WandbCallback
 from wandb_sweeps.src_config.wandb_utils import init_wandb
 from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
 cfg = config_dict.ConfigDict()
 
-cfg.add_biases = True
-cfg.alpha = 50.0
-cfg.architecture = "resnet6a_small"
-cfg.batch_size = 8_000
-cfg.clip_loss_gradient = 0.2
-cfg.condense = True
+cfg.batch_size = 5_000
 cfg.delta = 1e-5
 cfg.epsilon_max = 10.0
-cfg.hidden_size = 128
-cfg.input_clipping = 0.2
+cfg.input_bound = 15.0
 cfg.K = 0.99
-cfg.layer_centering = True
 cfg.learning_rate = 1e-3
-cfg.lip_coef = 1.0
-cfg.log_wandb = "disabled"
-cfg.min_margin = 0.5
-cfg.min_norm = 5.21
-cfg.mlp_channel_dim = 128
-cfg.mlp_seq_dim = 128
-cfg.model_name = "CIFAR10"
-cfg.noise_multiplier = 5.0
-cfg.noisify_strategy = "local"
-cfg.num_mixer_layers = 2
-cfg.optimizer = "Adam"
-cfg.patch_size = 2
-cfg.N = 50_000
-cfg.num_classes = 10
+cfg.log_wandb = "sweep_weekendboi"
 cfg.opt_iterations = 10
+cfg.noise_multiplier = 3.0
+cfg.noisify_strategy = "global"
 cfg.representation = "HSV"
-cfg.run_eagerly = False
+cfg.optimizer = "Adam"
 cfg.sweep_yaml_config = ""
-cfg.save = False
-cfg.save_folder = os.getcwd()
-cfg.skip_connections = True
+cfg.tau = 8.0
 cfg.sweep_id = ""
-cfg.tau = 1.0
-cfg.tag = "Default"
 cfg.loss = "TauCategoricalCrossentropy"
-
 
 _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 
 
-def create_model(dp_parameters, dataset_metadata, cfg, upper_bound):
-    if cfg.architecture == "MLP_Mixer":
-        model = create_MLP_Mixer(dp_parameters, dataset_metadata, cfg, upper_bound)
-    elif "VGG" in cfg.architecture:
-        model = create_VGG(dp_parameters, dataset_metadata, cfg, upper_bound)
-    elif cfg.architecture.startswith("resnet"):
-        model = create_ResNet(dp_parameters, dataset_metadata, cfg, upper_bound)
-    else:
-        raise ValueError(f"Invalid architecture argument {cfg.architecture}")
-    return model
+def create_Mixer(dataset_metadata, dp_parameters):
+    layers = [
+        DP_layers.DP_BoundedInput(
+            input_shape=dataset_metadata.input_shape,
+            upper_bound=dataset_metadata.max_norm,
+        )
+    ]
 
-
-def compile_model(model, cfg):
-    # Choice of optimizer
-    if cfg.optimizer == "SGD":
-        optimizer = tf.keras.optimizers.SGD(learning_rate=cfg.learning_rate)
-    elif cfg.optimizer == "Adam":
-        optimizer = tf.keras.optimizers.Adam(learning_rate=cfg.learning_rate)
-    else:
-        print("Illegal optimizer argument : ", cfg.optimizer)
-    # Choice of loss function
-    if cfg.loss == "MulticlassHKR":
-        if cfg.optimizer == "SGD":
-            cfg.learning_rate = cfg.learning_rate / (1 + cfg.alpha)
-        loss = DP_MulticlassHKR(
-            alpha=cfg.alpha,
-            min_margin=cfg.min_margin,
-            reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
-        )
-    elif cfg.loss == "MulticlassHinge":
-        loss = DP_MulticlassHinge(
-            min_margin=cfg.min_margin,
-            reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
-        )
-    elif cfg.loss == "MulticlassKR":
-        loss = DP_MulticlassKR(reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
-    elif cfg.loss == "TauCategoricalCrossentropy":
-        loss = DP_TauCategoricalCrossentropy(
-            cfg.tau, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
-        )
-    elif cfg.loss == "KCosineSimilarity":
-        K_min = cfg.K
-        loss = DP_KCosineSimilarity(
-            K_min, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
-        )
-    elif cfg.loss == "MAE":
-        loss = DP_MeanAbsoluteError(
-            reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
-        )
-    else:
-        raise ValueError(f"Illegal loss argument {cfg.loss}")
-    # Compile model
-    model.compile(
-        # decreasing alpha and increasing min_margin improve robustness (at the cost of accuracy)
-        # note also in the case of lipschitz networks, more robustness require more parameters.
-        loss=loss,
-        optimizer=optimizer,
-        metrics=["accuracy"],
-        run_eagerly=cfg.run_eagerly,
+    patch_size = 3
+    num_mixer_layers = 2
+    seq_len = (dataset_metadata.input_shape[0] // patch_size) * (
+        dataset_metadata.input_shape[1] // patch_size
     )
+    multiplier = 2
+    mlp_seq_dim = multiplier * seq_len
+    mlp_channel_dim = multiplier * seq_len
+    hidden_size = multiplier * seq_len
+
+    layers.append(
+        DP_layers.DP_Lambda(
+            tf.image.extract_patches,
+            arguments=dict(
+                sizes=[1, patch_size, patch_size, 1],
+                strides=[1, patch_size, patch_size, 1],
+                rates=[1, 1, 1, 1],
+                padding="VALID",
+            ),
+        )
+    )
+
+    layers.append(
+        DP_layers.DP_Reshape(
+            (seq_len, (patch_size**2) * dataset_metadata.input_shape[-1])
+        )
+    )
+    layers.append(
+        DP_layers.DP_QuickSpectralDense(
+            units=hidden_size, use_bias=False, kernel_initializer="identity"
+        )
+    )
+
+    for _ in range(num_mixer_layers):
+        to_add = [
+            DP_layers.DP_Permute((2, 1)),
+            DP_layers.DP_QuickSpectralDense(
+                units=mlp_seq_dim, use_bias=False, kernel_initializer="identity"
+            ),
+        ]
+        to_add.append(DP_layers.DP_GroupSort(2))
+        to_add.append(DP_layers.DP_LayerCentering())
+        to_add += [
+            DP_layers.DP_QuickSpectralDense(
+                units=seq_len, use_bias=False, kernel_initializer="identity"
+            ),
+            DP_layers.DP_Permute((2, 1)),
+        ]
+        layers += DP_layers.make_residuals("1-lip-add", to_add)
+        to_add = [
+            DP_layers.DP_QuickSpectralDense(
+                units=mlp_channel_dim, use_bias=False, kernel_initializer="identity"
+            ),
+        ]
+        to_add.append(DP_layers.DP_GroupSort(2))
+        to_add.append(DP_layers.DP_LayerCentering())
+        to_add.append(
+            DP_layers.DP_QuickSpectralDense(
+                units=hidden_size, use_bias=False, kernel_initializer="identity"
+            )
+        )
+        layers += DP_layers.make_residuals("1-lip-add", to_add)
+
+    layers.append(DP_layers.DP_Flatten())
+
+    layers.append(
+        DP_layers.DP_QuickSpectralDense(
+            units=10, use_bias=False, kernel_initializer="identity"
+        )
+    )
+    layers.append(DP_layers.DP_ClipGradient())
+
+    model = DP_Model(
+        layers,
+        dp_parameters=dp_parameters,
+        dataset_metadata=dataset_metadata,
+        nm_dynamic_clipping=100.0,
+        name="mlp_mixer",
+    )
+
+    model.build(input_shape=(None, *dataset_metadata.input_shape))
+
     return model
+
 
 def train():
-    init_wandb(cfg=cfg, project="dp-lipschitz_CIFAR10")
+    init_wandb(cfg=cfg, project="CIFAR10_dynamic_clipping")
+
+    # declare the privacy parameters
+    dp_parameters = DPParameters(
+        noisify_strategy=cfg.noisify_strategy,
+        noise_multiplier=cfg.noise_multiplier,
+        delta=cfg.delta,
+    )
 
     ds_train, ds_test, dataset_metadata = load_and_prepare_data(
         "cifar10",
-        cfg.batch_size,
+        batch_size=cfg.batch_size,
         colorspace=cfg.representation,
-        drop_remainder=True,
-        bound_fct=bound_clip_value(cfg.input_clipping),
+        drop_remainder=True,  # accounting assumes fixed batch size
+        bound_fct=bound_clip_value(
+            cfg.input_bound
+        ),  # clipping preprocessing allows to control input bound
     )
-    model = create_model(
-        DPParameters(
-            noisify_strategy=cfg.noisify_strategy,
-            noise_multiplier=cfg.noise_multiplier,
-            delta=cfg.delta,
-        ),
-        dataset_metadata,
-        cfg,
-        upper_bound=dataset_metadata.max_norm,
+
+    model = create_Mixer(dataset_metadata, dp_parameters)
+
+    if cfg.loss == "TauCategoricalCrossentropy":
+        loss = losses.DP_TauCategoricalCrossentropy(cfg.tau)
+    elif cfg.loss == "KCosineSimilarity":
+        loss = losses.DP_KCosineSimilarity(cfg.K)
+
+    model.compile(
+        loss=loss,
+        optimizer=tf.keras.optimizers.Adam(learning_rate=cfg.learning_rate),
+        # accuracy metric is necessary for dynamic loss gradient clipping
+        metrics=["accuracy"],
+        run_eagerly=False,
     )
-    model = compile_model(model, cfg)
+
     num_epochs = get_max_epochs(cfg.epsilon_max, model)
-    model.summary()
+
     callbacks = [
         WandbCallback(save_model=False, monitor="val_accuracy"),
         EarlyStopping(monitor="val_accuracy", min_delta=0.001, patience=15),
         ReduceLROnPlateau(
-            monitor="val_accuracy", factor=0.9, min_delta=0.0001, patience=5
+            monitor="val_accuracy", factor=0.9, min_delta=0.001, patience=8
         ),
         DP_Accountant(),
+        AdaptiveLossGradientClipping(),
     ]
+
     hist = model.fit(
         ds_train,
         epochs=num_epochs,
         validation_data=ds_test,
-        batch_size=cfg.batch_size,
         callbacks=callbacks,
     )
+
     wandb.log(
         {
             "Accuracies": wandb.plot.line_series(
@@ -204,12 +231,11 @@ def train():
             )
         }
     )
-    if cfg.save:
-        model.save(f"{cfg.save_folder}/{cfg.model_name}.h5")
 
 
 def main(_):
-    run_with_wandb(cfg=cfg, train_function=train, project="dp-lipschitz_CIFAR10")
+    run_with_wandb(cfg=cfg, train_function=train, project="CIFAR10_dynamic_clipping")
+
 
 if __name__ == "__main__":
     app.run(main)

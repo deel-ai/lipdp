@@ -80,7 +80,7 @@ def DP_GNP_Factory(layer_cls):
 
     Remark: the layer is assumed to be GNP.
     This means that the gradient norm is preserved by the layer (i.e its Jacobian norm is 1).
-    Pllease ensure that the layer is GNP before using this factory.
+    Please ensure that the layer is GNP before using this factory.
 
     Args:
         layer_cls: Class of the layer to wrap.
@@ -191,7 +191,7 @@ class DP_BoundedInput(tf.keras.layers.Layer, DPLayer):
 
     def __init__(self, *args, upper_bound, enforce_clipping=True, **kwargs):
         super().__init__(*args, **kwargs)
-        self.upper_bound = upper_bound
+        self.upper_bound = tf.convert_to_tensor(upper_bound)
         self.enforce_clipping = enforce_clipping
 
     def call(self, x, *args, **kwargs):
@@ -209,7 +209,7 @@ class DP_BoundedInput(tf.keras.layers.Layer, DPLayer):
     def propagate_inputs(self, input_bound):
         if input_bound is None:
             return self.upper_bound
-        return min(self.upper_bound, input_bound)
+        return tf.math.minimum(self.upper_bound, input_bound)
 
     def has_parameters(self):
         return False
@@ -218,7 +218,7 @@ class DP_BoundedInput(tf.keras.layers.Layer, DPLayer):
 class DP_ScaledL2NormPooling1D(tf.keras.layers.Layer, DPLayer):
     def __init__(self, axis=-1, eps=1e-6, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.eps = eps
+        self.eps = tf.convert_to_tensor(eps)
         self.axis = axis
 
     def call(self, inputs, training=True, **kwargs):
@@ -276,7 +276,6 @@ class LayerCentering(tf.keras.layers.Layer):
 
 class DP_LayerCentering(LayerCentering, DPLayer):
     def __init__(self, *args, **kwargs):
-        # TODO - Check that activation has a Jacobian norm of 1
         if "scale" in kwargs and kwargs["scale"]:
             raise ValueError("No scaling allowed.")
         if "center" in kwargs and not kwargs["center"]:
@@ -349,14 +348,18 @@ class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
     def __init__(self, *args, nm_coef=1, **kwargs):
         if "use_bias" in kwargs and kwargs["use_bias"]:
             raise ValueError("No bias allowed.")
+        if "trainable" in kwargs and not kwargs["trainable"]:
+            self.trainable = kwargs["trainable"]
+        else:
+            self.trainable = True
         kwargs["use_bias"] = False
         super().__init__(*args, **kwargs)
         self.nm_coef = nm_coef
 
     def backpropagate_params(self, input_bound, gradient_bound):
         return (
-            self._get_coef()
-            * np.sqrt(np.prod(self.kernel_size))
+            tf.convert_to_tensor(self._get_coef(), dtype=tf.float32)
+            * tf.convert_to_tensor(np.sqrt(np.prod(self.kernel_size)), dtype=tf.float32)
             * input_bound
             * gradient_bound
         )
@@ -368,7 +371,7 @@ class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
         return input_bound
 
     def has_parameters(self):
-        return True
+        return self.trainable
 
 
 @tf.custom_gradient
@@ -390,31 +393,63 @@ def clip_gradient(x, clip_value):
 class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
     """Clips the gradient during the backward pass.
 
-    Behave like identity function during the forward pass.
+    Behaves like identity function during the forward pass.
     The clipping is done automatically during the backward pass.
 
     Attributes:
-        clip_value (float): The maximum norm of the gradient.
+        clip_value (float): The maximum norm of the gradient allowed. Only
+        declare this variable if you plan on using the "fixed" clipping mode.
+        mode (str) : Type of update you wish to execute:
+            - "fixed" for a fixed clipping constant accross training.
+            - "dynamic_svt" for an adaptive clipping process using the sparse
+               vector technique. Note that the model accounts for this process.
+        patience (int): Determines how often dynamic clipping updates occur, measured in epochs.
+        epsilon (float): Represents the privacy guarantees provided by the clipping constant update using the Sparse Vector Technique (SVT).
+
+    Warning : The mode "dynamic_svt" needs to be used along with the AdaptiveLossGradientClipping callback
+    from the deel.lipdp.model module.
+
     """
 
-    def __init__(self, clip_value, *args, **kwargs):
+    def __init__(
+        self, mode, epsilon=None, clip_value=None, patience=1, *args, **kwargs
+    ):
         super().__init__(*args, **kwargs)
-        self.clip_value = clip_value
+        if mode not in ["fixed", "dynamic_svt"]:
+            raise ValueError("Unrecognised clipping mode argument")
+        if (clip_value is None) and (mode == "fixed"):
+            raise ValueError(
+                "clip_value has to be defined in arguments for fixed gradient clipping."
+            )
+        if (epsilon is None) and (mode == "dynamic_svt"):
+            raise ValueError(
+                "epsilon has to be defined in arguments for dynamic gradient clipping."
+            )
+        if (epsilon <= 0) and (mode == "dynamic_svt"):
+            raise ValueError("epsilon <= 0 impossible for SVT dynamic clipping")
+        # Change type back to float in case clip_value needs to be updated
+        if (clip_value is None) and (mode == "dynamic_svt"):
+            clip_value = 0.0
+        self.mode = mode
+        self.patience = patience
+        self.initial_value = clip_value
+        self.epsilon = epsilon
+        self.clip_value = tf.Variable(clip_value, trainable=False, dtype=tf.float32)
 
     def call(self, inputs, *args, **kwargs):
-        batch_size = tf.cast(tf.shape(inputs)[0], tf.float32)
+        batch_size = tf.convert_to_tensor(tf.cast(tf.shape(inputs)[0], tf.float32))
         # the clipping is done elementwise
         # since REDUCTION=SUM_OVER_BATCH_SIZE, we need to divide by batch_size
         # to get the correct norm.
         # this makes the clipping independent of the batch size.
-        elementwise_clip_value = self.clip_value / batch_size
+        elementwise_clip_value = self.clip_value.value() / batch_size
         return clip_gradient(inputs, elementwise_clip_value)
 
     def backpropagate_params(self, input_bound, gradient_bound):
         raise ValueError("ClipGradient doesn't have parameters")
 
     def backpropagate_inputs(self, input_bound, gradient_bound):
-        return min(gradient_bound, self.clip_value)
+        return tf.math.minimum(gradient_bound, self.clip_value)
 
     def propagate_inputs(self, input_bound):
         return input_bound
@@ -437,7 +472,7 @@ class AddBias(tf.keras.layers.Layer):
 
     def __init__(self, norm_max, **kwargs):
         super().__init__(**kwargs)
-        self.norm_max = norm_max
+        self.norm_max = tf.convert_to_tensor(norm_max)
 
     def build(self, input_shape):
         self.bias = self.add_weight(
@@ -449,7 +484,9 @@ class AddBias(tf.keras.layers.Layer):
 
     def call(self, inputs, **kwargs):
         # parametrize the bias so it belongs to a ball of norm norm_max.
-        bias = tf.clip_by_norm(self.bias, self.norm_max)  # 1-Lipschitz operation.
+        bias = tf.convert_to_tensor(
+            tf.clip_by_norm(self.bias, self.norm_max)
+        )  # 1-Lipschitz operation.
         return inputs + bias
 
 

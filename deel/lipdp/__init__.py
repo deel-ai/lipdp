@@ -52,7 +52,12 @@ from deel.lipdp.losses import (
     DP_MulticlassKR,
     DP_TauCategoricalCrossentropy,
 )
-from deel.lipdp.model import DP_Model, DP_Sequential, DP_Accountant
+from deel.lipdp.model import (
+    DP_Model,
+    DP_Sequential,
+    DP_Accountant,
+    AdaptiveLossGradientClipping,
+)
 from deel.lipdp.pipeline import load_and_prepare_data, bound_clip_value, bound_normalize
 from deel.lipdp.sensitivity import (
     get_max_epochs,
