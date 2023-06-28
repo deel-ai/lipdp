@@ -22,6 +22,8 @@
 # SOFTWARE.
 from dataclasses import dataclass
 from typing import List
+from typing import Optional
+from typing import Sequence
 from typing import Tuple
 
 import numpy as np
@@ -75,38 +77,41 @@ def bound_normalize():
     return bound, 1.0
 
 
+def augment(ds, augmentations, batch_size, drop_remainder):
+    ds = ds.batch(batch_size, drop_remainder=drop_remainder)
+    list_x = []
+    list_y = []
+    aug_models = [
+        tf.keras.Sequential([aug]) for aug in augmentations if not isinstance(aug, list)
+    ]
+    multiple_aug = [
+        tf.keras.Sequential(aug) for aug in augmentations if isinstance(aug, list)
+    ]
+    for element in multiple_aug:
+        aug_models.append(element)
+    for batch in ds:
+        x_batch, y_batch = batch
+        x_aug = tf.concat([aug_model(x_batch) for aug_model in aug_models], axis=0)
+        x_aug = tf.concat([x_batch, x_aug], axis=0)
+        y_aug = tf.concat([y_batch for _ in range(len(augmentations) + 1)], axis=0)
+        list_x.append(x_aug)
+        list_y.append(y_aug)
+    aug_ds = tf.data.Dataset.from_tensor_slices((list_x, list_y))
+    return aug_ds
+
+
 def load_and_prepare_data(
     dataset_name: str = "mnist",
     batch_size: int = 256,
+    augmentations: Optional[Sequence[tf.keras.layers.Layer]] = None,
     colorspace: str = "RGB",
+    random_flip: bool = True,
+    random_crop: bool = True,
+    crop_size: Optional[Sequence[int]] = None,
+    pad: Optional[int] = None,
     drop_remainder=True,
-    augmentation_fct=None,
     bound_fct=None,
 ):
-    """
-    load dataset_name data using tensorflow datasets.
-
-    Args:
-        dataset_name (str): name of the dataset to load.
-        batch_size (int): batch size
-        colorspace (str): one of RGB, HSV, YIQ, YUV
-        drop_remainder (bool, optional): when true drop the last batch if it
-            has less than batch_size elements. Defaults to True.
-        augmentation_fct (callable, optional): data augmentation to be applied
-            to train. the function must take a tuple (img, label) and return a
-            tuple of (img, label). Defaults to None.
-        bound_fct (callable, optional): function that is responsible of
-            bounding the inputs. Can be None, bound_normalize or bound_clip_value.
-            None means that no clipping is performed, and max theoretical value is
-            reported ( sqrt(w*h*c) ). bound_normalize means that each input is
-            normalized setting the bound to 1. bound_clip_value will clip norm to
-            defined value.
-
-    Returns:
-        ds_train, ds_test, metadat: two dataset, with data preparation,
-            augmentation, shuffling and batching. Also return an
-            DatasetMetadata object with infos about the dataset.
-    """
     # load data
     (ds_train, ds_test), ds_info = tfds.load(
         dataset_name,
@@ -115,38 +120,38 @@ def load_and_prepare_data(
         as_supervised=True,
         with_info=True,
     )
-    # handle case where functions are None
-    if augmentation_fct is None:
-        augmentation_fct = lambda x, y: (x, y)
     # None bound yield default trivial bound
     nb_classes = ds_info.features["label"].num_classes
     input_shape = ds_info.features["image"].shape
+
     if bound_fct is None:
         bound_fct = (
             lambda x, y: (x, y),
             input_shape[-3] * input_shape[-2] * input_shape[-1],
         )
     bound_callable, bound_val = bound_fct
+
+    ds_train = ds_train.map(
+        lambda x, y: (tf.cast(x, tf.float32) / 255.0, tf.one_hot(y, nb_classes)),
+        num_parallel_calls=tf.data.AUTOTUNE,
+    )
+
+    if augmentations is not None:
+        ds_train = augment(ds_train, augmentations, batch_size, drop_remainder)
+    else:
+        ds_train = ds_train.batch(batch_size, drop_remainder=drop_remainder)
+
     # train pipeline
     ds_train = (
-        ds_train.map(  # map to 0,1 and one hot encode
-            lambda x, y: (
-                tf.cast(x, tf.float32) / 255.0,
-                tf.one_hot(y, nb_classes),
-            ),
-            num_parallel_calls=tf.data.AUTOTUNE,
-        )
-        .shuffle(  # shuffle
+        ds_train.shuffle(  # shuffle
             min(batch_size * 10, max(batch_size, ds_train.cardinality())),
             reshuffle_each_iteration=True,
         )
-        .map(augmentation_fct, num_parallel_calls=tf.data.AUTOTUNE)  # augment
         .map(  # map colorspace
             get_colorspace_function(colorspace),
             num_parallel_calls=tf.data.AUTOTUNE,
         )
         .map(bound_callable, num_parallel_calls=tf.data.AUTOTUNE)  # apply bound
-        .batch(batch_size, drop_remainder=drop_remainder)  # batch
         .prefetch(tf.data.AUTOTUNE)
     )
 
