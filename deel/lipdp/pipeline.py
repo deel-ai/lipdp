@@ -131,9 +131,16 @@ def load_and_prepare_data(
         )
     bound_callable, bound_val = bound_fct
 
-    ds_train = ds_train.map(
-        lambda x, y: (tf.cast(x, tf.float32) / 255.0, tf.one_hot(y, nb_classes)),
-        num_parallel_calls=tf.data.AUTOTUNE,
+    ds_train = (
+        ds_train.map(
+            lambda x, y: (tf.cast(x, tf.float32) / 255.0, tf.one_hot(y, nb_classes)),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
+        .map(  # map colorspace
+            get_colorspace_function(colorspace),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
+        .map(bound_callable, num_parallel_calls=tf.data.AUTOTUNE)  # apply bound
     )
 
     if augmentations is not None:
@@ -142,18 +149,10 @@ def load_and_prepare_data(
         ds_train = ds_train.batch(batch_size, drop_remainder=drop_remainder)
 
     # train pipeline
-    ds_train = (
-        ds_train.shuffle(  # shuffle
-            min(batch_size * 10, max(batch_size, ds_train.cardinality())),
-            reshuffle_each_iteration=True,
-        )
-        .map(  # map colorspace
-            get_colorspace_function(colorspace),
-            num_parallel_calls=tf.data.AUTOTUNE,
-        )
-        .map(bound_callable, num_parallel_calls=tf.data.AUTOTUNE)  # apply bound
-        .prefetch(tf.data.AUTOTUNE)
-    )
+    ds_train = ds_train.shuffle(  # shuffle
+        min(batch_size * 10, max(batch_size, ds_train.cardinality())),
+        reshuffle_each_iteration=True,
+    ).prefetch(tf.data.AUTOTUNE)
 
     ds_test = (
         ds_test.map(

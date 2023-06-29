@@ -45,27 +45,20 @@ from deel.lipdp.sensitivity import get_max_epochs
 # declare the privacy parameters
 dp_parameters = DPParameters(
     noisify_strategy="global",
-    noise_multiplier=0.8,
+    noise_multiplier=2.0,
     delta=1e-5,
 )
 
 augmentations = [
-    [
-        keras_cv.layers.RandomTranslation(
-            0.2, 0.2, fill_mode="reflect", interpolation="bilinear"
-        ),
-        keras_cv.layers.RandomRotation(
-            0.2, fill_mode="reflect", interpolation="bilinear"
-        ),
-        keras_cv.layers.RandomZoom(
-            0.1, width_factor=0.1, fill_mode="reflect", interpolation="bilinear"
-        ),
-    ]
+    keras_cv.layers.RandomRotation(0.2, fill_mode="reflect", interpolation="bilinear"),
+    keras_cv.layers.RandomTranslation(
+        0.2, 0.2, fill_mode="reflect", interpolation="bilinear"
+    ),
 ]
 
 ds_train, ds_test, dataset_metadata = load_and_prepare_data(
     "cifar10",
-    batch_size=2000,
+    batch_size=1000,
     colorspace="HSV",
     augmentations=augmentations,
     drop_remainder=True,  # accounting assumes fixed batch size
@@ -80,11 +73,8 @@ layers = [
         upper_bound=dataset_metadata.max_norm,
     ),
     DP_layers.DP_SpectralConv2D(
-        filters=50, kernel_size=3, use_bias=False, kernel_initializer="orthogonal"
+        filters=80, kernel_size=3, use_bias=False, kernel_initializer="orthogonal"
     ),
-    DP_layers.DP_ScaledL2NormPooling2D(pool_size=2),
-    DP_layers.DP_LayerCentering(),
-    DP_layers.DP_GroupSort(2),
     DP_layers.DP_Flatten(),
     DP_layers.DP_SpectralDense(
         units=512, use_bias=False, kernel_initializer="orthogonal"
@@ -107,7 +97,7 @@ loss = losses.DP_TauCategoricalCrossentropy(14.5)
 
 model.compile(
     loss=loss,
-    optimizer=tf.keras.optimizers.SGD(learning_rate=0.05),
+    optimizer=tf.keras.optimizers.SGD(learning_rate=1e-2),
     metrics=["accuracy"],
     run_eagerly=False,
 )
