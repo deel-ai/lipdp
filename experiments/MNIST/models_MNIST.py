@@ -58,7 +58,7 @@ def create_Dense_Model(cfg, upper_bound):
         DP_LayerCentering(),
         DP_SpectralDense(10, use_bias=False, nm_coef=1.0),
         DP_AddBias(norm_max=1),
-        DP_ClipGradient(cfg.clip_loss_gradient),
+        DP_ClipGradient(epsilon=1, mode="dynamic_svt", patience=10),
     ]
     if not cfg.add_biases:
         model = DP_Sequential(
@@ -105,7 +105,7 @@ def create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound):
         DP_AddBias(norm_max=1),
         DP_SpectralDense(10, use_bias=False),
         DP_AddBias(norm_max=1),
-        DP_ClipGradient(cfg.clip_loss_gradient),
+        DP_ClipGradient(epsilon=1, mode="dynamic_svt", patience=10),
     ]
     if not cfg.add_biases:
         model = DP_Sequential(

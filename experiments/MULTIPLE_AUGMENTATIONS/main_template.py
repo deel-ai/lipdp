@@ -22,6 +22,7 @@
 # SOFTWARE.
 import os
 
+import keras_cv
 import numpy as np
 import tensorflow as tf
 import yaml
@@ -49,6 +50,14 @@ from wandb_sweeps.src_config.wandb_utils import init_wandb
 from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
 cfg = config_dict.ConfigDict()
+
+# TODO : Find ideal augmentations
+cfg.augmentations = [
+    keras_cv.layers.RandomRotation(0.2, fill_mode="reflect", interpolation="bilinear"),
+    keras_cv.layers.RandomTranslation(
+        0.2, 0.2, fill_mode="reflect", interpolation="bilinear"
+    ),
+]
 
 cfg.architecture = "VGG5_small"  # resnet and VGG are also options
 cfg.batch_size = 1000
@@ -96,6 +105,7 @@ def train():
         "cifar10",
         batch_size=cfg.batch_size,
         colorspace=cfg.representation,
+        augmentations=cfg.augmentations,
         drop_remainder=True,  # accounting assumes fixed batch size
         bound_fct=bound_clip_value(
             cfg.input_bound

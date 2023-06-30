@@ -58,7 +58,7 @@ augmentations = [
 
 ds_train, ds_test, dataset_metadata = load_and_prepare_data(
     "cifar10",
-    batch_size=1000,
+    batch_size=500,
     colorspace="HSV",
     augmentations=augmentations,
     drop_remainder=True,  # accounting assumes fixed batch size
@@ -73,7 +73,7 @@ layers = [
         upper_bound=dataset_metadata.max_norm,
     ),
     DP_layers.DP_SpectralConv2D(
-        filters=80, kernel_size=3, use_bias=False, kernel_initializer="orthogonal"
+        filters=32, kernel_size=3, use_bias=False, kernel_initializer="orthogonal"
     ),
     DP_layers.DP_Flatten(),
     DP_layers.DP_SpectralDense(

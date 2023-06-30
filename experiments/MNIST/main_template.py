@@ -57,7 +57,7 @@ cfg = config_dict.ConfigDict()
 cfg.add_biases = True
 cfg.alpha = 50.0
 cfg.architecture = "ConvNet"
-cfg.batch_size = 8_192
+cfg.batch_size = 4_096
 cfg.condense = True
 cfg.clip_loss_gradient = 1.0
 cfg.delta = 1e-5
@@ -106,6 +106,7 @@ def compile_model(model, cfg):
         optimizer = tf.keras.optimizers.Adam(learning_rate=cfg.learning_rate)
     else:
         print("Illegal optimizer argument : ", cfg.optimizer)
+
     # Choice of loss function
     if cfg.loss == "MulticlassHKR":
         if cfg.optimizer == "SGD":
@@ -137,6 +138,7 @@ def compile_model(model, cfg):
         )
     else:
         raise ValueError(f"Illegal loss argument {cfg.loss}")
+
     # Compile model
     model.compile(
         # decreasing alpha and increasing min_margin improve robustness (at the cost of accuracy)
