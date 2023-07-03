@@ -5,14 +5,15 @@ By using 1-Lipschitz networks developped by the deel-lip project. We can propose
 DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
 batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
 
-Therefore, the computation time is heavily reduced and the results on the MNIST and CIFAR10 datasets are the following :
+To find out more information about this method and the framework please refer to our [pre-print](https://arxiv.org/abs/2305.16202).
+
+This framework allows for fast and intuitive training of differentially private networks. To test our methods on the MNIST
+and CIFAR10 datasets, please refer to the tutorials folder of the repository.  
 
 
 # Status of the repository : 
 
-- ci tests to develop.
-- sensitivity.py to debug.
-- requirements.txt tested on my machine, still to check by someone else.
+- Compatibility issues to address. 
 
 # Deel library repository template
 
