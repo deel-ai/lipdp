@@ -5,5 +5,5 @@ numpy
 deel-lip
 matplotlib
 pandas
-tensorflow
+tensorflow<=2.10.0
 tensorflow-datasets
