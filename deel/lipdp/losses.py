@@ -95,6 +95,8 @@ class DP_MulticlassHKR(MulticlassHKR, DP_Loss):
         min_margin=1.0,
         reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
         name="MulticlassHKR",
+        *args,
+        **kwargs,
     ):
         """
         The multiclass version of HKR. This is done by computing the HKR term over each
@@ -118,9 +120,9 @@ class DP_MulticlassHKR(MulticlassHKR, DP_Loss):
         super(DP_MulticlassHKR, self).__init__(
             alpha=alpha,
             min_margin=min_margin,
-            multi_gpu=False,
             reduction=reduction,
             name=name,
+            multi_gpu=kwargs["multi_gpu"],
         )
 
     def get_L(self):
