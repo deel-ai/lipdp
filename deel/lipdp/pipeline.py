@@ -112,6 +112,33 @@ def load_and_prepare_data(
     drop_remainder=True,
     bound_fct=None,
 ):
+    """
+    load dataset_name data using tensorflow datasets.
+
+    Args:
+        dataset_name (str): name of the dataset to load.
+        batch_size (int): batch size
+        augmentations (list of layer objects) : list of augmentations you want to append to
+        the batch.
+        colorspace (str): one of RGB, HSV, YIQ, YUV
+        drop_remainder (bool, optional): when true drop the last batch if it
+            has less than batch_size elements. Defaults to True.
+        augmentation_fct (callable, optional): data augmentation to be applied
+            to train. the function must take a tuple (img, label) and return a
+            tuple of (img, label). Defaults to None.
+        bound_fct (callable, optional): function that is responsible of
+            bounding the inputs. Can be None, bound_normalize or bound_clip_value.
+            None means that no clipping is performed, and max theoretical value is
+            reported ( sqrt(w*h*c) ). bound_normalize means that each input is
+            normalized setting the bound to 1. bound_clip_value will clip norm to
+            defined value.
+
+    Returns:
+        ds_train, ds_test, metadat: two dataset, with data preparation,
+            augmentation, shuffling and batching. Also return an
+            DatasetMetadata object with infos about the dataset.
+    """
+
     # load data
     (ds_train, ds_test), ds_info = tfds.load(
         dataset_name,

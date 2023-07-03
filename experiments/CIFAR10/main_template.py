@@ -50,7 +50,7 @@ from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
 cfg = config_dict.ConfigDict()
 
-cfg.architecture = "VGG5_small"  # resnet and VGG are also options
+cfg.architecture = "MLP_Mixer"  # resnet and VGG are also options
 cfg.batch_size = 1000
 cfg.delta = 1e-5
 cfg.epsilon_max = 10.0

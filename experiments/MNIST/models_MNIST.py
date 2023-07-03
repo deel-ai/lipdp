@@ -36,7 +36,7 @@ from deel.lipdp.model import DP_Model
 from deel.lipdp.model import DP_Sequential
 
 
-def create_Dense_Model(cfg, upper_bound):
+def create_Dense_Model(dp_parameters, dataset_metadata, cfg, upper_bound):
     all_layers = [
         DP_BoundedInput(input_shape=(28, 28, 1), upper_bound=upper_bound),
         DP_Flatten(),
@@ -63,14 +63,14 @@ def create_Dense_Model(cfg, upper_bound):
     if not cfg.add_biases:
         model = DP_Sequential(
             [layer for layer in all_layers if not isinstance(layer, DP_AddBias)],
-            cfg=cfg,
-            noisify_strategy=cfg.noisify_strategy,
+            dp_parameters=dp_parameters,
+            dataset_metadata=dataset_metadata,
         )
     elif cfg.add_biases:
         model = DP_Sequential(
             all_layers,
-            cfg=cfg,
-            noisify_strategy=cfg.noisify_strategy,
+            dp_parameters=dp_parameters,
+            dataset_metadata=dataset_metadata,
         )
     return model
 
@@ -85,7 +85,7 @@ def create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound):
             strides=1,
             use_bias=False,
         ),
-        DP_AddBias(norm_max=1),
+        DP_AddBias(norm_max=1.0),
         DP_GroupSort(2),
         DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
         DP_LayerCentering(),
@@ -96,15 +96,15 @@ def create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound):
             strides=1,
             use_bias=False,
         ),
-        DP_AddBias(norm_max=1),
+        DP_AddBias(norm_max=1.0),
         DP_GroupSort(2),
         DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
         DP_LayerCentering(),
         DP_Flatten(),
         DP_SpectralDense(1024, use_bias=False),
-        DP_AddBias(norm_max=1),
+        DP_AddBias(norm_max=1.0),
         DP_SpectralDense(10, use_bias=False),
-        DP_AddBias(norm_max=1),
+        DP_AddBias(norm_max=1.0),
         DP_ClipGradient(epsilon=1, mode="dynamic_svt", patience=10),
     ]
     if not cfg.add_biases:

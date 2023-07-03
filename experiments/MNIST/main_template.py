@@ -54,9 +54,9 @@ from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
 cfg = config_dict.ConfigDict()
 
-cfg.add_biases = True
+cfg.add_biases = False
 cfg.alpha = 50.0
-cfg.architecture = "ConvNet"
+cfg.architecture = "Dense"
 cfg.batch_size = 4_096
 cfg.condense = True
 cfg.clip_loss_gradient = 1.0
@@ -82,7 +82,7 @@ cfg.sweep_yaml_config = ""
 cfg.save = False
 cfg.save_folder = os.getcwd()
 cfg.sweep_id = ""
-cfg.tau = 1.0
+cfg.tau = 14.5
 cfg.tag = "Default"
 
 _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
