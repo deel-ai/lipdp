@@ -117,12 +117,16 @@ class DP_MulticlassHKR(MulticlassHKR, DP_Loss):
             name (str): passed to tf.keras.Loss constructor
 
         """
+        if "multi_gpu" in kwargs.keys():
+            multi_gpu = kwargs["multi_gpu"]
+        else:
+            multi_gpu = False
         super(DP_MulticlassHKR, self).__init__(
             alpha=alpha,
             min_margin=min_margin,
             reduction=reduction,
             name=name,
-            multi_gpu=kwargs["multi_gpu"],
+            multi_gpu=multi_gpu,
         )
 
     def get_L(self):
