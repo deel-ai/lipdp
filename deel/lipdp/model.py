@@ -56,7 +56,6 @@ def clipsum(norms, C):
         7.0
     """
     norms = tf.cast(norms, dtype=tf.float32)
-    C = tf.constant([C])
     C = tf.cast(C, dtype=tf.float32)
     return tf.math.reduce_sum(tf.math.minimum(norms, C))
 

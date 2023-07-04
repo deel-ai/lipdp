@@ -44,7 +44,6 @@ and CIFAR10 datasets, please refer to the tutorials folder of the repository.
 # Status of the repository : 
 
 - Compatibility issues are to be addressed soon.
-- Dynamic gradient clipping is unavailable with the Multiclass HKR loss function. 
 
 ## 📚 Table of contents
 
@@ -111,7 +110,9 @@ This project received funding from the French ”Investing for the Future – PI
 
 ## 👨‍🎓 Creators
 
-If you want to highlights the main contributors
+If you want to highlights the main contributors :
+
+TO WRITE
 
 
 ## 🗞️ Citation
