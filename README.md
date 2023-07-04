@@ -1,84 +1,3 @@
-# Purpose of this library :
-
-Conventionally, Differentially Private ML training relies on Gradient Clipping to guarantee verifiable privacy guarantees.
-By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based
-DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
-batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
-
-To find out more information about this method and the framework please refer to our [pre-print](https://arxiv.org/abs/2305.16202).
-
-This framework allows for fast and intuitive training of differentially private networks. To test our methods on the MNIST
-and CIFAR10 datasets, please refer to the tutorials folder of the repository.  
-
-
-# Status of the repository : 
-
-- Compatibility issues to address. 
-
-# Deel library repository template
-
-Ce dépôt git sert de template pour les librairies DEEL ayant vocation à être rendues publiques sur github.
-Il donne la structure des répertoires d'un projet telle que celle adoptée par les librairies DEEL déjà publiques.
-
-A la racine du projet on trouve:
-
-- deel : répertoire destiné à recevoir le code de la librairie. C'est le premier mot de l'espaces de nommage de
-        la librairie. Ce n'est pas un module python, il ne contient donc pas de fichier __init__.py.
-        Il contient le module principal de la librairie du nom de cette librairie.
-        
-        Example: 
-        
-        librairie **deel-lip**:
-                    deel/deel-lip       
-
-- docs: répertoire destiné à la documentation de la librairie
-
-- tests: répertoire des tests unitaires
-
-- .pre-commit-config.yaml : configuration de outil de contrôle avant commit (pre-commit)
-
-- LICENCE/headers/MIT-Clause.txt : entête licence MIT injectée dans les fichiers du projet
-
-- CONTRIBUTING.md: description de la procédure pour apporter une contribution à la librairie.
-
-- GOUVERNANCE.md: description de la manière dont la librairie est gérée.
-
-- LICENCE : texte de la licence sous laquelle est publiée la librairie (MIT).
-
-- README.md 
-
-
-# pre-commit : Conventional Commits 1.0.0
-
-The commit message should be structured as follows:
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-
-```
-
-The commit contains the following structural elements, to communicate intent to the consumers of your library:
-
-- fix: a commit of the type fix patches a bug in your codebase (this correlates with PATCH in Semantic Versioning).
-
-- feat: a commit of the type feat introduces a new feature to the codebase (this correlates with MINOR in Semantic Versioning).
-
-- BREAKING CHANGE: a commit that has a footer BREAKING CHANGE:, or appends a ! after the type/scope, introduces a breaking API change (correlating with MAJOR in Semantic Versioning). A BREAKING CHANGE can be part of commits of any type.
-
-- types other than fix: and feat: are allowed, for example @commitlint/config-conventional (based on the the Angular convention) recommends *build:, chore:, ci:, docs:, style:, refactor:, perf:, test:*, and [others](https://delicious-insights.com/fr/articles/git-hooks-et-commitlint/).
- 
-- footers other than BREAKING CHANGE: <description> may be provided and follow a convention similar to git trailer format.
-
-- Additional types are not mandated by the Conventional Commits specification, and have no implicit effect in Semantic Versioning (unless they include a BREAKING CHANGE). A scope may be provided to a commit’s type, to provide additional contextual information and is contained within parenthesis, e.g., feat(parser): add ability to parse arrays.
-
-# README sections
-
-The following should be used as a template for the README of your library. Of course, depending on what you are doing not all sections are necessary but try to keep the order of the sections.
-
 <!-- Banner section -->
 <div align="center">
         <picture>
@@ -102,7 +21,7 @@ The following should be used as a template for the README of your library. Of co
 
 <!-- Short description of your library -->
 <p align="center">
-  <b>Libname</b> is a Python toolkit dedicated to make people happy and fun.
+  <b>LipDP</b> is a Python toolkit dedicated to differentially private training of 1-Lipschitz networks.
 
   <!-- Link to the documentation -->
   <br>
@@ -110,6 +29,22 @@ The following should be used as a template for the README of your library. Of co
   <br>
 
 </p>
+
+# Purpose of this library :
+
+Conventionally, Differentially Private machine learning relies on gradient clipping to guarantee verifiable privacy guarantees.
+By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based on 
+theoretically obtained gradient bounds. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, 
+we can directly calibrate a batchwise noisifying of the gradients to guarantee $(\epsilon,\delta)$-DP.
+
+This framework allows for fast and intuitive training of differentially private networks. To test our methods on the MNIST
+and CIFAR10 datasets, please refer to the tutorials folder of the repository.  
+
+
+# Status of the repository : 
+
+- Compatibility issues are to be addressed soon.
+- Dynamic gradient clipping is unavailable with the Multiclass HKR loss function. 
 
 ## 📚 Table of contents
 
@@ -128,57 +63,32 @@ The following should be used as a template for the README of your library. Of co
 
 We propose some tutorials to get familiar with the library and its api:
 
-- [Getting started](https://colab.research.google.com/drive/1XproaVxXjO9nrBSyyy7BuKJ1vy21iHs2) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/<libname>/blob/master/docs/notebooks/demo_fake.ipynb) </sub>
-
-You do not necessarily need to register the notebooks on the GitHub. Notebooks can be hosted on a specific [drive](https://drive.google.com/drive/folders/1DOI1CsL-m9jGjkWM1hyDZ1vKmSU1t-be).
+| **Tutorial Name**           | Notebook                                                                                                                                                           |
+| :-------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------: |
+| MNIST Classification          | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/deel-lipdp/blob/master/docs/notebooks/mnist_train.ipynb)            |
+| CIFAR10 Classification        | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/deel-lipdp/blob/master/docs/notebooks/cifar_train.ipynb) |
 
 ## 🚀 Quick Start
 
-Libname requires some stuff and several libraries including Numpy. Installation can be done using Pypi:
+LipDP has some dependancies given in the 'requirements.txt' file. Installation can be done using Pypi:
 
 ```python
-pip install libname
+pip install lipdp
 ```
-
-Now that Libname is installed, here are some basic examples of what you can do with the available modules.
-
-### Print Hello World
-
-Let's start with a simple example:
-
-```python
-from libname.fake import hello_world
-
-hello_world()
-```
-
-### Make addition
-
-In order to add `a` to `b` you can use:
-
-```python
-from libname.fake import addition
-
-a = 1
-b = 2
-c = addition(a, b)
-```
-
 ## 📦 What's Included
 
-A list or table of methods available
+* Loader for tensorflow datasets. 
+* Keras like 1-Lipschitz DP models (Sequential and Model). 
+* Custom DP loss functions.
+* Custom DP layer objects. 
+* Custom training process with $(\epsilon,\delta)$-DP guarantees through a callback. 
+* Adaptive loss gradient clipping as a callback leveraging the SVT method. 
 
 ## 👍 Contributing
 
 Feel free to propose your ideas or come and contribute with us on the Libname toolbox! We have a specific document where we describe in a simple way how to make your first pull request: [just here](CONTRIBUTING.md).
 
 ## 👀 See Also
-
-This library is one approach of many...
-
-Other tools to explain your model include:
-
-- [Random](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
 
 More from the DEEL project:
 
@@ -206,14 +116,18 @@ If you want to highlights the main contributors
 
 ## 🗞️ Citation
 
-If you use Libname as part of your workflow in a scientific publication, please consider citing the 🗞️ [our paper](https://www.youtube.com/watch?v=dQw4w9WgXcQ):
+If you use LipDP as part of your workflow in a scientific publication, please consider citing our paper introducing the 
+method [DP-SGD Without Clipping : The Lipschitz Neural Network Way](https://arxiv.org/abs/2305.16202).
+:
 
 ```
-@article{rickroll,
-  title={Rickrolling},
-  author={Some Internet Trolls},
-  journal={Best Memes},
-  year={ND}
+@misc{bethune2023dpsgd,
+      title={DP-SGD Without Clipping: The Lipschitz Neural Network Way}, 
+      author={Louis Bethune and Thomas Massena and Thibaut Boissin and Yannick Prudent and Corentin Friedrich and Franck Mamalet and Aurelien Bellet and Mathieu Serrurier and David Vigouroux},
+      year={2023},
+      eprint={2305.16202},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
 }
 ```
 
