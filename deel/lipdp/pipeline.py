@@ -77,27 +77,31 @@ def bound_normalize():
     return bound, 1.0
 
 
-def augment(ds, augmentations, batch_size, drop_remainder):
-    ds = ds.batch(batch_size, drop_remainder=drop_remainder)
-    list_x = []
-    list_y = []
-    aug_models = [
-        tf.keras.Sequential([aug]) for aug in augmentations if not isinstance(aug, list)
-    ]
-    multiple_aug = [
-        tf.keras.Sequential(aug) for aug in augmentations if isinstance(aug, list)
-    ]
-    for element in multiple_aug:
-        aug_models.append(element)
-    for batch in ds:
-        x_batch, y_batch = batch
-        x_aug = tf.concat([aug_model(x_batch) for aug_model in aug_models], axis=0)
-        x_aug = tf.concat([x_batch, x_aug], axis=0)
-        y_aug = tf.concat([y_batch for _ in range(len(augmentations) + 1)], axis=0)
-        list_x.append(x_aug)
-        list_y.append(y_aug)
-    aug_ds = tf.data.Dataset.from_tensor_slices((list_x, list_y))
-    return aug_ds
+def augment_ds(augmentations):
+    def augment(x, y):
+        augmented_imgs = [x]
+        for aug in augmentations:
+            augmented_imgs.append(aug(x))
+        x = tf.stack(augmented_imgs, axis=0)
+        y = tf.stack([y] * (len(augmentations) + 1), axis=0)
+        return x, y
+
+    return augment
+
+
+def reshape_ds(augmentations):
+    def reshape_batch(x, y):
+        shape_batch_x = x.shape
+        shape_batch_y = y.shape
+        assert shape_batch_x[1] == len(augmentations) + 1
+        assert shape_batch_y[1] == len(augmentations) + 1
+        new_shape_x = shape_batch_x[0] * shape_batch_x[1] + shape_batch_x[2:]
+        new_shape_y = shape_batch_y[0] * shape_batch_y[1] + shape_batch_y[2:]
+        x = tf.reshape(tensor=x, shape=tuple(new_shape_x))
+        y = tf.reshape(tensor=y, shape=tuple(new_shape_y))
+        return x, y
+
+    return reshape_batch
 
 
 def load_and_prepare_data(
@@ -105,10 +109,6 @@ def load_and_prepare_data(
     batch_size: int = 256,
     augmentations: Optional[Sequence[tf.keras.layers.Layer]] = None,
     colorspace: str = "RGB",
-    random_flip: bool = True,
-    random_crop: bool = True,
-    crop_size: Optional[Sequence[int]] = None,
-    pad: Optional[int] = None,
     drop_remainder=True,
     bound_fct=None,
 ):
@@ -118,14 +118,12 @@ def load_and_prepare_data(
     Args:
         dataset_name (str): name of the dataset to load.
         batch_size (int): batch size
-        augmentations (list of layer objects) : list of augmentations you want to append to
+        augmentations (list of functions) : list of augmentation functions, said functions
+        have to return the augmented version of a single image.
         the batch.
         colorspace (str): one of RGB, HSV, YIQ, YUV
         drop_remainder (bool, optional): when true drop the last batch if it
             has less than batch_size elements. Defaults to True.
-        augmentation_fct (callable, optional): data augmentation to be applied
-            to train. the function must take a tuple (img, label) and return a
-            tuple of (img, label). Defaults to None.
         bound_fct (callable, optional): function that is responsible of
             bounding the inputs. Can be None, bound_normalize or bound_clip_value.
             None means that no clipping is performed, and max theoretical value is
@@ -171,9 +169,14 @@ def load_and_prepare_data(
     )
 
     if augmentations is not None:
-        ds_train = augment(ds_train, augmentations, batch_size, drop_remainder)
-    else:
-        ds_train = ds_train.batch(batch_size, drop_remainder=drop_remainder)
+        aug_callable = augment_ds(augmentations)
+        ds_train = ds_train.map(aug_callable, num_parallel_calls=tf.data.AUTOTUNE)
+
+    ds_train = ds_train.batch(batch_size, drop_remainder=drop_remainder)
+
+    if augmentations is not None:
+        reshape_callable = reshape_ds(augmentations)
+        ds_train = ds_train.map(reshape_callable, num_parallel_calls=tf.data.AUTOTUNE)
 
     # train pipeline
     ds_train = ds_train.shuffle(  # shuffle
