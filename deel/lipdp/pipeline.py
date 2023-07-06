@@ -217,7 +217,7 @@ def load_and_prepare_data(
         nb_classes=ds_info.features["label"].num_classes,
         nb_samples_train=ds_info.splits["train"].num_examples,
         nb_samples_test=ds_info.splits["test"].num_examples,
-        nb_augmentations=len(augmentations),
+        nb_augmentations=nb_augmentations,
         class_names=ds_info.features["label"].names,
         nb_steps_per_epochs=ds_train.cardinality().numpy()
         if ds_train.cardinality() > 0  # handle case cardinality return -1 (unknown)

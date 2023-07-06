@@ -436,17 +436,16 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
         # since REDUCTION=SUM_OVER_BATCH_SIZE, we need to divide by batch_size
         # to get the correct norm.
         # this makes the clipping independent of the batch size.
-        elementwise_clip_value = self.clip_value.value() / (
-            batch_size / self.group_size
-        )
+        group_size = self.group_size
 
         @tf.custom_gradient
-        def clip_value(y):
+        def clip_value(y, clip_value):
+            elementwise_clip_value = self.clip_value.value() / (batch_size / group_size)
+
             def grad_fn(dy):
                 # clip by norm each row
                 axes = list(range(1, len(dy.shape)))
                 # reshape to (B, N, Nclasses) formalism
-                group_size = self.group_size
                 new_shape = (dy.shape[0] // group_size, group_size) + dy.shape[1:]
                 dy = tf.reshape(dy, shape=new_shape)
                 # compute the mean across augmentations
@@ -455,12 +454,12 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
                 clipped_dy = tf.clip_by_norm(dy, elementwise_clip_value, axes=axes)
                 # go back to original shape
                 clipped_dy = tf.repeat(clipped_dy, axis=0, repeats=group_size)
-                return clipped_dy
+                return clipped_dy, None  # No gradient for clip value
 
             # return the gradients
             return y, grad_fn
 
-        return clip_value(inputs)
+        return clip_value(inputs, self.clip_value)
 
     def backpropagate_params(self, input_bound, gradient_bound):
         raise ValueError("ClipGradient doesn't have parameters")
