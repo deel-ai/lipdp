@@ -374,33 +374,6 @@ class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
         return self.trainable
 
 
-@tf.custom_gradient
-def clip_gradient(x, clip_value, group_size):
-    """Clips the gradient during the backward pass.
-
-    Behave like identity function during the forward pass.
-    """
-
-    def grad_fn(dy):
-        # clip by norm each row
-        axes = list(range(1, len(dy.shape)))
-        # reshape to (B, N, Nclasses) formalism
-        new_shape = tf.stack([dy.shape[0] // group_size, group_size], axis=0)
-        for dim in dy.shape[1:]:
-            new_shape = tf.concat([new_shape, [dim]], axis=0)
-        dy = tf.reshape(dy, shape=new_shape)
-        # compute the mean across augmentations
-        dy = tf.reduce_mean(dy, axis=1)
-        # go back to original shape
-        dy = tf.repeat(dy, axis=0, repeats=group_size)
-        # clip the loss gradient
-        clipped_dy = tf.clip_by_norm(dy, clip_value, axes=axes)
-        # return the gradients
-        return clipped_dy, None, None  # No gradient for clip_value and group_size
-
-    return x, grad_fn
-
-
 class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
     """Clips the gradient during the backward pass.
 
@@ -463,8 +436,31 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
         # since REDUCTION=SUM_OVER_BATCH_SIZE, we need to divide by batch_size
         # to get the correct norm.
         # this makes the clipping independent of the batch size.
-        elementwise_clip_value = self.clip_value.value() / batch_size
-        return clip_gradient(inputs, elementwise_clip_value, self.group_size)
+        elementwise_clip_value = self.clip_value.value() / (
+            batch_size / self.group_size
+        )
+
+        @tf.custom_gradient
+        def clip_value(y):
+            def grad_fn(dy):
+                # clip by norm each row
+                axes = list(range(1, len(dy.shape)))
+                # reshape to (B, N, Nclasses) formalism
+                group_size = self.group_size
+                new_shape = (dy.shape[0] // group_size, group_size) + dy.shape[1:]
+                dy = tf.reshape(dy, shape=new_shape)
+                # compute the mean across augmentations
+                dy = tf.reduce_mean(dy, axis=axes)
+                # clip the loss gradient
+                clipped_dy = tf.clip_by_norm(dy, elementwise_clip_value, axes=axes)
+                # go back to original shape
+                clipped_dy = tf.repeat(clipped_dy, axis=0, repeats=group_size)
+                return clipped_dy
+
+            # return the gradients
+            return y, grad_fn
+
+        return clip_value(inputs)
 
     def backpropagate_params(self, input_bound, gradient_bound):
         raise ValueError("ClipGradient doesn't have parameters")

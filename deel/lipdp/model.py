@@ -166,9 +166,23 @@ class AdaptiveLossGradientClipping(keras.callbacks.Callback):
         imgs, labels = batch
         self.model.loss.reduction = tf.keras.losses.Reduction.NONE
         predictions = self.model(imgs)
+
+        last_layer = self.model.layers_backward_order()[0]
+
         with tf.GradientTape() as tape:
             tape.watch(predictions)
             loss_value = self.model.compiled_loss(labels, predictions)
+            if isinstance(last_layer, DP_ClipGradient):
+                group_size = last_layer.group_size
+                if group_size != 1:
+                    new_shape = (
+                        loss_value.shape[0] // group_size,
+                        group_size,
+                    ) + loss_value.shape[1:]
+                    loss_value = tf.reshape(loss_value, new_shape)
+                    loss_value = tf.reduce_mean(loss_value, axis=1)
+                    loss_value = tf.repeat(loss_value, axis=0, repeats=group_size)
+
         self.model.loss.reduction = tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         grad_loss = tape.gradient(loss_value, predictions)
         norms = tf.norm(grad_loss, axis=-1)
