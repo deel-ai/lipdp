@@ -557,6 +557,15 @@ class DP_Sequential(deel.lip.model.Sequential):
         self.dp_parameters = dp_parameters
         self.dataset_metadata = dataset_metadata
         self.debug = debug
+        if isinstance(self.layers_backward_order()[0], DP_ClipGradient):
+            if (
+                self.layers_backward_order()[0].group_size
+                != dataset_metadata.nb_augmentations + 1
+                and self.layers_backward_order()[0].group_size != 1
+            ):
+                raise TypeError(
+                    "Incompatible augmentations and group size for the clipping layer."
+                )
         if self.dp_parameters.noisify_strategy == "global":
             self.noisify_fun = global_noisify
         elif self.dp_parameters.noisify_strategy == "local":
@@ -635,6 +644,15 @@ class DP_Model(deel.lip.model.Model):
         self.dp_parameters = dp_parameters
         self.dataset_metadata = dataset_metadata
         self.debug = debug
+        if isinstance(self.layers_backward_order()[0], DP_ClipGradient):
+            if (
+                self.layers_backward_order()[0].group_size
+                != dataset_metadata.nb_augmentations + 1
+                and self.layers_backward_order()[0].group_size != 1
+            ):
+                raise TypeError(
+                    "Incompatible augmentations and group size for the clipping layer."
+                )
         if self.dp_parameters.noisify_strategy == "global":
             self.noisify_fun = global_noisify
         elif self.dp_parameters.noisify_strategy == "local":

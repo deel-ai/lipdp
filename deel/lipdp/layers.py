@@ -375,7 +375,7 @@ class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
 
 
 @tf.custom_gradient
-def clip_gradient(x, clip_value):
+def clip_gradient(x, clip_value, group_size):
     """Clips the gradient during the backward pass.
 
     Behave like identity function during the forward pass.
@@ -384,8 +384,19 @@ def clip_gradient(x, clip_value):
     def grad_fn(dy):
         # clip by norm each row
         axes = list(range(1, len(dy.shape)))
+        # reshape to (B, N, Nclasses) formalism
+        new_shape = tf.stack([dy.shape[0] // group_size, group_size], axis=0)
+        for dim in dy.shape[1:]:
+            new_shape = tf.concat([new_shape, [dim]], axis=0)
+        dy = tf.reshape(dy, shape=new_shape)
+        # compute the mean across augmentations
+        dy = tf.reduce_mean(dy, axis=1)
+        # go back to original shape
+        dy = tf.repeat(dy, axis=0, repeats=group_size)
+        # clip the loss gradient
         clipped_dy = tf.clip_by_norm(dy, clip_value, axes=axes)
-        return clipped_dy, None  # No gradient for clip_value
+        # return the gradients
+        return clipped_dy, None, None  # No gradient for clip_value and group_size
 
     return x, grad_fn
 
@@ -404,6 +415,8 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
             - "dynamic_svt" for an adaptive clipping process using the sparse
                vector technique. Note that the model accounts for this process.
         patience (int): Determines how often dynamic clipping updates occur, measured in epochs.
+        group_size (int): Corresponds to the number of augmentations of a single image in a batch. Use group_size = 1 (default) for classical
+        training. Else, use group_size = nb_augmentations to average the gradients of single augmented images during the backpropagation process.
         epsilon (float): Represents the privacy guarantees provided by the clipping constant update using the Sparse Vector Technique (SVT).
 
     Warning : The mode "dynamic_svt" needs to be used along with the AdaptiveLossGradientClipping callback
@@ -412,7 +425,14 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
     """
 
     def __init__(
-        self, mode, epsilon=None, clip_value=None, patience=1, *args, **kwargs
+        self,
+        mode,
+        epsilon=None,
+        clip_value=None,
+        patience=1,
+        group_size=1,
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         if mode not in ["fixed", "dynamic_svt"]:
@@ -434,6 +454,7 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
         self.patience = patience
         self.initial_value = clip_value
         self.epsilon = epsilon
+        self.group_size = group_size
         self.clip_value = tf.Variable(clip_value, trainable=False, dtype=tf.float32)
 
     def call(self, inputs, *args, **kwargs):
@@ -443,7 +464,7 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
         # to get the correct norm.
         # this makes the clipping independent of the batch size.
         elementwise_clip_value = self.clip_value.value() / batch_size
-        return clip_gradient(inputs, elementwise_clip_value)
+        return clip_gradient(inputs, elementwise_clip_value, self.group_size)
 
     def backpropagate_params(self, input_bound, gradient_bound):
         raise ValueError("ClipGradient doesn't have parameters")

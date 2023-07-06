@@ -42,6 +42,7 @@ class DatasetMetadata:
     nb_classes: int
     nb_samples_train: int
     nb_samples_test: int
+    nb_augmentations: int
     class_names: List[str]
     nb_steps_per_epochs: int
     batch_size: int
@@ -204,12 +205,19 @@ def load_and_prepare_data(
         .batch(batch_size, drop_remainder=drop_remainder)
         .prefetch(tf.data.AUTOTUNE)
     )
+
+    if augmentations is None:
+        nb_augmentations = 0
+    else:
+        nb_augmentations = len(augmentations)
+
     # get dataset metadata
     metadata = DatasetMetadata(
         input_shape=ds_info.features["image"].shape,
         nb_classes=ds_info.features["label"].num_classes,
         nb_samples_train=ds_info.splits["train"].num_examples,
         nb_samples_test=ds_info.splits["test"].num_examples,
+        nb_augmentations=len(augmentations),
         class_names=ds_info.features["label"].names,
         nb_steps_per_epochs=ds_train.cardinality().numpy()
         if ds_train.cardinality() > 0  # handle case cardinality return -1 (unknown)
