@@ -339,6 +339,7 @@ class DP_Accountant(keras.callbacks.Callback):
         epsilon, delta = get_eps_delta(model=self.model, niter=niter, epochs=epoch + 1)
         print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
         # plot epoch at the same time as epsilon and delta to ease comparison of plots in wandb API.
+        logs["epsilon"] = epsilon
         self.log_fn({"epsilon": epsilon, "delta": delta, "epoch": epoch + 1})
 
 
@@ -360,6 +361,10 @@ def get_eps_delta(model, niter, epochs):
             dynamic_clipping = last_layer.mode
             epsilon_clipping = last_layer.epsilon
             patience = last_layer.patience
+        else:
+            dynamic_clipping = None
+            epsilon_clipping = None
+            patience = None
         mech = Local_DPGD_Mechanism(
             prob=prob,
             sigmas=sigmas,
@@ -377,6 +382,10 @@ def get_eps_delta(model, niter, epochs):
             dynamic_clipping = last_layer.mode
             epsilon_clipping = last_layer.epsilon
             patience = last_layer.patience
+        else:
+            dynamic_clipping = None
+            epsilon_clipping = None
+            patience = None
         mech = Global_DPGD_Mechanism(
             prob=prob,
             sigma=model.dp_parameters.noise_multiplier,
