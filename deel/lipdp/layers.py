@@ -397,40 +397,31 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
     The clipping is done automatically during the backward pass.
 
     Attributes:
-        clip_value (float): The maximum norm of the gradient allowed. Only
-        declare this variable if you plan on using the "fixed" clipping mode.
-        mode (str) : Type of update you wish to execute:
-            - "fixed" for a fixed clipping constant accross training.
-            - "dynamic_svt" for an adaptive clipping process using the sparse
-               vector technique. Note that the model accounts for this process.
+        clip_value (float, optional):
+                            The maximum norm of the gradient allowed. Only
+                            declare this variable if you plan on using the "fixed" clipping mode.
+                            Otherwise it will be updated automatically.
         patience (int): Determines how often dynamic clipping updates occur, measured in epochs.
         epsilon (float): Represents the privacy guarantees provided by the clipping constant update using the Sparse Vector Technique (SVT).
 
     Warning : The mode "dynamic_svt" needs to be used along with the AdaptiveLossGradientClipping callback
     from the deel.lipdp.model module.
-
     """
 
-    def __init__(
-        self, mode, epsilon=None, clip_value=None, patience=1, *args, **kwargs
-    ):
+    def __init__(self, clip_value, epsilon=None, patience=1, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if mode not in ["fixed", "dynamic_svt"]:
-            raise ValueError("Unrecognised clipping mode argument")
-        if (clip_value is None) and (mode == "fixed"):
-            raise ValueError(
-                "clip_value has to be defined in arguments for fixed gradient clipping."
-            )
-        if (epsilon is None) and (mode == "dynamic_svt"):
-            raise ValueError(
-                "epsilon has to be defined in arguments for dynamic gradient clipping."
-            )
-        if (epsilon <= 0) and (mode == "dynamic_svt"):
-            raise ValueError("epsilon <= 0 impossible for SVT dynamic clipping")
-        # Change type back to float in case clip_value needs to be updated
-        if (clip_value is None) and (mode == "dynamic_svt"):
+
+        if clip_value is None:
+            self.mode = "dynamic_svt"
+            # Change type back to float in case clip_value needs to be updated
             clip_value = 0.0
-        self.mode = mode
+            assert (
+                epsilon is not None
+            ), "epsilon has to be defined in arguments for dynamic gradient clipping."
+            assert epsilon > 0, "epsilon <= 0 impossible."
+        else:
+            self.mode = "fixed"
+
         self.patience = patience
         self.initial_value = clip_value
         self.epsilon = epsilon

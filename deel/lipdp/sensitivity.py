@@ -56,7 +56,7 @@ def get_max_epochs(epsilon_max, model, epochs_max=1024):
         else:
             epoch = round(epoch)
             niter = (epoch + 1) * steps_per_epoch
-            epsilon, _ = get_eps_delta(model, niter, epoch)
+            epsilon, _ = get_eps_delta(model, epoch)
         return epsilon
 
     # dichotomy search on the number of epochs.

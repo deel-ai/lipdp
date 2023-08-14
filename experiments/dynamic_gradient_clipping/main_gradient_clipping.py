@@ -77,8 +77,8 @@ layers = [
         units=10, use_bias=False, kernel_initializer="orthogonal"
     ),
     DP_layers.DP_ClipGradient(
-        epsilon=1, mode="dynamic_svt", patience=5
-    ),  # for fixed clipping use mode="fixed"
+        clip_value=None, epsilon=1, patience=5
+    ),  # for fixed clipping use clip_value = cste
 ]
 
 model = DP_Sequential(
@@ -100,7 +100,7 @@ callbacks = [
     DP_Accountant(log_fn="logging"),
     AdaptiveLossGradientClipping(
         ds_train=ds_train
-    ),  # DO NOT USE THIS CALLBACK WHEN mode = "dynamic_svt"
+    ),  # DO NOT USE THIS CALLBACK WHEN mode != "dynamic_svt"
     ReduceLROnPlateau(monitor="val_accuracy", factor=0.9, min_delta=0.01, patience=3),
 ]
 

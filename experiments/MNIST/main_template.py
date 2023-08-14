@@ -20,24 +20,17 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import math
 import os
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import yaml
 from absl import app
-from absl import flags
 from ml_collections import config_dict
 from ml_collections import config_flags
 from models_MNIST import create_ConvNet
-from models_MNIST import create_Dense_Model
-from tensorflow import keras
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
-from tensorflow.keras.layers import Flatten
-from tensorflow.keras.layers import Input
 
 import wandb
 from deel.lipdp.losses import *
@@ -47,7 +40,6 @@ from deel.lipdp.pipeline import bound_clip_value
 from deel.lipdp.pipeline import load_and_prepare_data
 from deel.lipdp.sensitivity import get_max_epochs
 from wandb.keras import WandbCallback
-from wandb.keras import WandbMetricsLogger
 from wandb_sweeps.src_config.wandb_utils import init_wandb
 from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
@@ -92,7 +84,7 @@ def create_model(dp_parameters, dataset_metadata, cfg, upper_bound):
     if cfg.architecture == "ConvNet":
         model = create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound)
     elif cfg.architecture == "Dense":
-        model = create_Dense_Model(dp_parameters, dataset_metadata, cfg, upper_bound)
+        raise NotImplementedError("Dense architecture not implemented yet")
     else:
         raise ValueError(f"Invalid architecture argument {cfg.architecture}")
     return model

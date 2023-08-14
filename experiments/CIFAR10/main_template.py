@@ -51,12 +51,13 @@ from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 cfg = config_dict.ConfigDict()
 
 cfg.batch_size = 5_000
+cfg.clip_loss_gradient = 1.0
 cfg.delta = 1e-5
 cfg.epsilon_max = 10.0
 cfg.input_bound = 15.0
 cfg.K = 0.99
 cfg.learning_rate = 1e-3
-cfg.log_wandb = "sweep_weekendboi"
+cfg.log_wandb = "disabled"
 cfg.opt_iterations = 10
 cfg.noise_multiplier = 3.0
 cfg.noisify_strategy = "global"
@@ -148,13 +149,12 @@ def create_Mixer(dataset_metadata, dp_parameters):
             units=10, use_bias=False, kernel_initializer="identity"
         )
     )
-    layers.append(DP_layers.DP_ClipGradient())
+    layers.append(DP_layers.DP_ClipGradient(clip_value=cfg.clip_loss_gradient))
 
     model = DP_Model(
         layers,
         dp_parameters=dp_parameters,
         dataset_metadata=dataset_metadata,
-        nm_dynamic_clipping=100.0,
         name="mlp_mixer",
     )
 
@@ -207,7 +207,7 @@ def train():
             monitor="val_accuracy", factor=0.9, min_delta=0.001, patience=8
         ),
         DP_Accountant(),
-        AdaptiveLossGradientClipping(),
+        # AdaptiveLossGradientClipping(),
     ]
 
     hist = model.fit(

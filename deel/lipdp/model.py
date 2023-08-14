@@ -112,13 +112,13 @@ def above_treshold(queries, sensitivity, T, epsilon):
 
 
 class AdaptiveLossGradientClipping(keras.callbacks.Callback):
-    """
-    This callback privately updates the clipping value of the last layer of the model
-    if the last layer of the model is a DP_ClipGradient layer with mode = "dynamic_svt".
+    """Updates the clipping value of the last layer of the model.
 
-    Args :
+    This callback privately updates the clipping value if the last layer
+    of the model is a DP_ClipGradient layer with mode = "dynamic_svt".
+
+    Attributes :
         ds_train : a tensorflow dataset object.
-
     """
 
     def __init__(self, ds_train=None):
@@ -178,110 +178,90 @@ class AdaptiveLossGradientClipping(keras.callbacks.Callback):
 
 @dataclass
 class DPParameters:
+    """Parameters used to set the dp training.
+
+    Attributes:
+        noisify_strategy (str): either 'local' or 'global'.
+        noise_multiplier (float): noise multiplier.
+        delta (float): delta parameter for DP.
+    """
+
     noisify_strategy: str
     noise_multiplier: float
     delta: float
 
 
-class Global_DPGD_Mechanism(Mechanism):
+class DPGD_Mechanism(Mechanism):
+    """DPGD Mechanism.
+
+    Args:
+        mode (str): kind of mechanism to use. Either 'global' or 'local'.
+        prob (float): probability of subsampling.
+        noise_multipliers (float, or list of floats): single scalar when mode == 'global', list of scalars when mode == 'local'.
+        num_grad_steps (int): number of gradient steps.
+        delta (float): delta parameter for DP.
+        dynamic_clipping (optional, dict): dictionary of parameters for dynamic clipping with keys:
+            epsilon (float): epsilon parameter for SVT algorithm.
+            num_updates (int): patience parameter for SVT algorithm.
+    """
+
     def __init__(
         self,
+        mode,
         prob,
-        sigma,
-        niter,
+        noise_multipliers,
+        num_grad_steps,
         delta,
-        dynamic_clipping,
-        epsilon_clipping,
-        patience,
-        epochs,
-        name="Layer_DPGD",
+        dynamic_clipping=None,
+        name="DPGD_Mechanism",
     ):
         # Init
         Mechanism.__init__(self)
         self.name = name
-        self.params = {"prob": prob, "sigmas": sigma, "niter": niter}
+        self.params = {
+            "prob": prob,
+            "noise_multipliers": noise_multipliers,
+            "num_grad_steps": num_grad_steps,
+            "delta": delta,
+            "dynamic_clipping": dynamic_clipping,
+        }
 
-        model_mech = mechanism_zoo.GaussianMechanism(sigma=sigma)
-        subsample = transformer_zoo.AmplificationBySampling()
-        SubsampledModelGaussian_mech = subsample(
-            model_mech, prob, improved_bound_flag=True
-        )
-        compose = transformer_zoo.Composition()
+        if mode == "global":
+            model_mech = mechanism_zoo.GaussianMechanism(sigma=noise_multipliers)
+        elif mode == "local":
+            layer_mechanisms = []
 
-        if (dynamic_clipping is None) or (dynamic_clipping == "fixed"):
-            global_mech = compose([SubsampledModelGaussian_mech], [niter])
-        elif dynamic_clipping == "dynamic_svt":
-            DynamicClippingMech = mechanism_zoo.PureDP_Mechanism(
-                eps=epsilon_clipping, name="SVT"
-            )
-            global_mech = compose(
-                [SubsampledModelGaussian_mech, DynamicClippingMech],
-                [niter, epochs // patience],
+            for sigma in noise_multipliers:
+                mech = mechanism_zoo.GaussianMechanism(sigma=sigma)
+                layer_mechanisms.append(mech)
+
+            # Accountant composition on layers
+            compose_gaussians = transformer_zoo.ComposeGaussian()
+            model_mech = compose_gaussians(
+                layer_mechanisms, [1] * len(noise_multipliers)
             )
         else:
-            raise ValueError("Unknow value of dynamic clipping")
-        # Get relevant information
-        self.epsilon = global_mech.get_approxDP(delta=delta)
-        self.delta = delta
+            raise ValueError("Unknown kind of mechanism")
 
-        # Propagate updates
-        rdp_global = global_mech.RenyiDP
-        self.propagate_updates(rdp_global, type_of_update="RDP")
-
-
-class Local_DPGD_Mechanism(Mechanism):
-    def __init__(
-        self,
-        prob,
-        sigmas,
-        niter,
-        delta,
-        dynamic_clipping,
-        epsilon_clipping,
-        patience,
-        epochs,
-        name="Layer_DPGD",
-    ):
-        # Init
-        Mechanism.__init__(self)
-        self.name = name
-        self.params = {"prob": prob, "sigmas": sigmas, "niter": niter}
-
-        # Create useful vars
-        layer_mechanisms = []
-
-        for sigma in sigmas:
-            mech = mechanism_zoo.GaussianMechanism(sigma=sigma)
-            layer_mechanisms.append(mech)
-
-        # Accountant composition on layers
-        compose_gaussians = transformer_zoo.ComposeGaussian()
-        composed_layers = compose_gaussians(layer_mechanisms, [1] * len(sigmas))
-
-        # Accountant composition of subsampling processes
         subsample = transformer_zoo.AmplificationBySampling()
-        SubsampledGaussian_mech = subsample(
+        SubsampledModelGaussian_mech = subsample(
             # improved_bound_flag can be set to True for Gaussian mechanisms (see autodp documentation).
-            composed_layers,
+            model_mech,
             prob,
             improved_bound_flag=True,
         )
-
-        # Accounting for niter iterations
         compose = transformer_zoo.Composition()
 
-        if (dynamic_clipping is None) or (dynamic_clipping == "fixed"):
-            global_mech = compose([SubsampledGaussian_mech], [niter])
-        elif dynamic_clipping == "dynamic_svt":
+        if dynamic_clipping is None or dynamic_clipping["mode"] == "fixed":
+            global_mech = compose([SubsampledModelGaussian_mech], [num_grad_steps])
+        elif dynamic_clipping["mode"] == "dynamic_svt":
             DynamicClippingMech = mechanism_zoo.PureDP_Mechanism(
-                eps=epsilon_clipping, name="SVT"
+                eps=dynamic_clipping["epsilon"], name="SVT"
             )
             global_mech = compose(
-                [SubsampledGaussian_mech, DynamicClippingMech],
-                [niter, epochs // patience],
+                [SubsampledModelGaussian_mech, DynamicClippingMech],
+                [num_grad_steps, dynamic_clipping["num_updates"]],
             )
-        else:
-            raise ValueError("Unknow value of dynamic clipping")
 
         # Get relevant information
         self.epsilon = global_mech.get_approxDP(delta=delta)
@@ -322,58 +302,54 @@ class DP_Accountant(keras.callbacks.Callback):
         self.log_fn = log_fn
 
     def on_epoch_end(self, epoch, logs=None):
-        niter = (epoch + 1) * self.model.dataset_metadata.nb_steps_per_epochs
-        epsilon, delta = get_eps_delta(model=self.model, niter=niter, epochs=epoch + 1)
+        epsilon, delta = get_eps_delta(model=self.model, epochs=epoch + 1)
         print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
         # plot epoch at the same time as epsilon and delta to ease comparison of plots in wandb API.
         self.log_fn({"epsilon": epsilon, "delta": delta, "epoch": epoch + 1})
 
 
-def get_eps_delta(model, niter, epochs):
+def get_eps_delta(model, epochs):
+    """Compute the (epsilon, delta)-DP guarantees of the model.
+
+    Args:
+        model: model to train.
+        epochs: number of epochs elapsed.
+
+    Returns:
+        epsilon: epsilon parameter of the (epsilon, delta)-DP guarantee.
+        delta: delta parameter of the (epsilon, delta)-DP guarantee.
+    """
+    num_grad_steps = epochs * model.dataset_metadata.nb_steps_per_epochs
+
     prob = model.dataset_metadata.batch_size / model.dataset_metadata.nb_samples_train
-    # nm_coefs.values are in the right order because:
-    # since Python 3.6 dictionaries are ordered by insertion order - this is an implementation detail and not guaranteed by the language spec.
-    # since Python 3.7 dictionaries are ordered by insertion order - this is guaranteed by the language spec.
+
+    last_layer = model.layers_backward_order()[0]
+    dynamic_clipping = None
+    if isinstance(last_layer, deel.lipdp.layers.DP_ClipGradient):
+        dynamic_clipping = {}
+        dynamic_clipping["mode"] = last_layer.mode
+        dynamic_clipping["epsilon"] = last_layer.epsilon
+        dynamic_clipping["num_updates"] = epochs // last_layer.patience
+
     if model.dp_parameters.noisify_strategy == "local":
         nm_coefs = get_noise_multiplier_coefs(model)
-        # Get noise multipliers :
-        sigmas = [
+        noise_multipliers = [
             model.dp_parameters.noise_multiplier * coef for coef in nm_coefs.values()
         ]
-        # TODO : Check if callback is executed, not only if last layer is of type ClipGradient
-        last_layer = model.layers_backward_order()[0]
-        dynamic_clipping = None
-        if isinstance(last_layer, deel.lipdp.layers.DP_ClipGradient):
-            dynamic_clipping = last_layer.mode
-            epsilon_clipping = last_layer.epsilon
-            patience = last_layer.patience
-        mech = Local_DPGD_Mechanism(
-            prob=prob,
-            sigmas=sigmas,
-            delta=model.dp_parameters.delta,
-            niter=niter,
-            dynamic_clipping=dynamic_clipping,
-            epsilon_clipping=epsilon_clipping,
-            patience=patience,
-            epochs=epochs,
-        )
-    if model.dp_parameters.noisify_strategy == "global":
-        last_layer = model.layers_backward_order()[0]
-        dynamic_clipping = None
-        if isinstance(last_layer, deel.lipdp.layers.DP_ClipGradient):
-            dynamic_clipping = last_layer.mode
-            epsilon_clipping = last_layer.epsilon
-            patience = last_layer.patience
-        mech = Global_DPGD_Mechanism(
-            prob=prob,
-            sigma=model.dp_parameters.noise_multiplier,
-            delta=model.dp_parameters.delta,
-            niter=niter,
-            dynamic_clipping=dynamic_clipping,
-            epsilon_clipping=epsilon_clipping,
-            patience=patience,
-            epochs=epochs,
-        )
+        mode = "local"
+    elif model.dp_parameters.noisify_strategy == "global":
+        noise_multipliers = model.dp_parameters.noise_multiplier
+        mode = "global"
+
+    mech = DPGD_Mechanism(
+        mode=mode,
+        prob=prob,
+        noise_multipliers=noise_multipliers,
+        num_grad_steps=num_grad_steps,
+        delta=model.dp_parameters.delta,
+        dynamic_clipping=dynamic_clipping,
+    )
+
     return mech.epsilon, mech.delta
 
 

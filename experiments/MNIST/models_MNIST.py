@@ -36,46 +36,8 @@ from deel.lipdp.model import DP_Model
 from deel.lipdp.model import DP_Sequential
 
 
-def create_Dense_Model(cfg, upper_bound):
-    all_layers = [
-        DP_BoundedInput(input_shape=(28, 28, 1), upper_bound=upper_bound),
-        DP_Flatten(),
-        DP_SpectralDense(1024, use_bias=False, nm_coef=1.0),
-        DP_AddBias(norm_max=1),
-        DP_GroupSort(2),
-        DP_LayerCentering(),
-        DP_SpectralDense(512, use_bias=False, nm_coef=1.0),
-        DP_AddBias(norm_max=1),
-        DP_GroupSort(2),
-        DP_LayerCentering(),
-        DP_SpectralDense(256, use_bias=False, nm_coef=1.0),
-        DP_AddBias(norm_max=1),
-        DP_GroupSort(2),
-        DP_LayerCentering(),
-        DP_SpectralDense(128, use_bias=False, nm_coef=1.0),
-        DP_AddBias(norm_max=1),
-        DP_GroupSort(2),
-        DP_LayerCentering(),
-        DP_SpectralDense(10, use_bias=False, nm_coef=1.0),
-        DP_AddBias(norm_max=1),
-        DP_ClipGradient(cfg.clip_loss_gradient),
-    ]
-    if not cfg.add_biases:
-        model = DP_Sequential(
-            [layer for layer in all_layers if not isinstance(layer, DP_AddBias)],
-            cfg=cfg,
-            noisify_strategy=cfg.noisify_strategy,
-        )
-    elif cfg.add_biases:
-        model = DP_Sequential(
-            all_layers,
-            cfg=cfg,
-            noisify_strategy=cfg.noisify_strategy,
-        )
-    return model
-
-
 def create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound):
+    norm_max = 1.0
     all_layers = [
         DP_BoundedInput(input_shape=(28, 28, 1), upper_bound=upper_bound),
         DP_SpectralConv2D(
@@ -85,7 +47,7 @@ def create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound):
             strides=1,
             use_bias=False,
         ),
-        DP_AddBias(norm_max=1),
+        DP_AddBias(norm_max=norm_max),
         DP_GroupSort(2),
         DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
         DP_LayerCentering(),
@@ -96,27 +58,24 @@ def create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound):
             strides=1,
             use_bias=False,
         ),
-        DP_AddBias(norm_max=1),
+        DP_AddBias(norm_max=norm_max),
         DP_GroupSort(2),
         DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
         DP_LayerCentering(),
         DP_Flatten(),
-        DP_SpectralDense(1024, use_bias=False),
-        DP_AddBias(norm_max=1),
-        DP_SpectralDense(10, use_bias=False),
-        DP_AddBias(norm_max=1),
-        DP_ClipGradient(cfg.clip_loss_gradient),
+        DP_SpectralDense(1024, use_bias=False, kernel_initializer="orthogonal"),
+        DP_AddBias(norm_max=norm_max),
+        DP_SpectralDense(10, use_bias=False, kernel_initializer="orthogonal"),
+        DP_AddBias(norm_max=norm_max),
+        DP_ClipGradient(clip_value=cfg.clip_loss_gradient),
     ]
     if not cfg.add_biases:
-        model = DP_Sequential(
-            [layer for layer in all_layers if not isinstance(layer, DP_AddBias)],
-            dp_parameters=dp_parameters,
-            dataset_metadata=dataset_metadata,
-        )
-    elif cfg.add_biases:
-        model = DP_Sequential(
-            all_layers,
-            dp_parameters=dp_parameters,
-            dataset_metadata=dataset_metadata,
-        )
+        all_layers = [
+            layer for layer in all_layers if not isinstance(layer, DP_AddBias)
+        ]
+    model = DP_Sequential(
+        all_layers,
+        dp_parameters=dp_parameters,
+        dataset_metadata=dataset_metadata,
+    )
     return model

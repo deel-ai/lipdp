@@ -123,20 +123,12 @@ def create_MLP_Mixer(dp_parameters, dataset_metadata, cfg, upper_bound):
     if cfg.clip_loss_gradient is not None:
         layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
 
-    if cfg.skip_connections:
-        model = DP_Model(
-            layers,
-            dp_parameters=dp_parameters,
-            dataset_metadata=dataset_metadata,
-            name="mlp_mixer",
-        )
-    else:
-        model = DP_Sequential(
-            layers,
-            dp_parameters=dp_parameters,
-            dataset_metadata=dataset_metadata,
-            name="mlp_mixer",
-        )
+    model = DP_Model(
+        layers,
+        dp_parameters=dp_parameters,
+        dataset_metadata=dataset_metadata,
+        name="mlp_mixer",
+    )
 
     model.build(input_shape=(None, *input_shape))
 
@@ -250,12 +242,16 @@ def VGG_factory(
 
     # Fully connected layers
     for _ in range(depth_fc):
-        layers.append(DP_SpectralDense(init_filters * 8, use_bias=False))
+        layers.append(
+            DP_SpectralDense(
+                init_filters * 8, use_bias=False, kernel_initializer="orthogonal"
+            )
+        )
         layers.append(DP_AddBias(norm_max=1))
         layers.append(DP_GroupSort(2))
         layers.append(DP_LayerCentering())
 
-    layers.append(DP_SpectralDense(10, use_bias=False))
+    layers.append(DP_SpectralDense(10, use_bias=False, kernel_initializer="orthogonal"))
     layers.append(DP_AddBias(norm_max=1))
     layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
 
