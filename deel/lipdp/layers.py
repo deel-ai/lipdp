@@ -26,6 +26,8 @@ import numpy as np
 import tensorflow as tf
 
 import deel.lip
+from deel.lip.constraints import SpectralConstraint
+from deel.lip.normalizers import DEFAULT_EPS_BJORCK
 
 
 class DPLayer:
@@ -333,6 +335,84 @@ class DP_QuickSpectralDense(tf.keras.layers.Dense, DPLayer):
 
     def backpropagate_params(self, input_bound, gradient_bound):
         return input_bound * gradient_bound
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
+
+    def propagate_inputs(self, input_bound):
+        return input_bound
+
+    def has_parameters(self):
+        return True
+
+
+def _compute_conv_lip_factor(kernel_size, strides, input_shape, data_format):
+    """Compute the Lipschitz factor to apply on estimated Lipschitz constant in
+    convolutional layer. This factor depends on the kernel size, the strides and the
+    input shape.
+
+    Copied from deel-lip.
+    """
+    stride = np.prod(strides)
+    kh, kw = kernel_size[0], kernel_size[1]
+    kh_div2 = (kh - 1) / 2
+    kw_div2 = (kw - 1) / 2
+
+    if data_format == "channels_last":
+        h, w = input_shape[-3], input_shape[-2]
+    elif data_format == "channels_first":
+        h, w = input_shape[-2], input_shape[-1]
+    else:
+        raise RuntimeError("data_format not understood: " % data_format)
+
+    if stride == 1:
+        return np.sqrt(
+            (w * h)
+            / ((kh * h - kh_div2 * (kh_div2 + 1)) * (kw * w - kw_div2 * (kw_div2 + 1)))
+        )
+    else:
+        return np.sqrt(1.0 / (np.ceil(kh / strides[0]) * np.ceil(kw / strides[1])))
+
+
+class DP_QuickSpectralConv2D(tf.keras.layers.Conv2D, DPLayer):
+    def __init__(self, *args, nm_coef=1, orthogonal=True, **kwargs):
+        if "use_bias" in kwargs and kwargs["use_bias"]:
+            raise ValueError("No bias allowed.")
+        kwargs["use_bias"] = False
+        eps_bjorck = DEFAULT_EPS_BJORCK if orthogonal else None
+        constraint = SpectralConstraint(eps_bjorck=eps_bjorck)
+        kwargs.update(
+            dict(
+                kernel_initializer="orthogonal",
+                kernel_constraint=constraint,
+            )
+        )
+        super().__init__(*args, **kwargs)
+        self.nm_coef = nm_coef
+
+    def _get_coef(self):
+        return _compute_conv_lip_factor(
+            self.kernel_size, self.strides, self.input_shape, self.data_format
+        )
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        self.built = True
+        self.kernel.constraint.k_coef_lip = _compute_conv_lip_factor(
+            self.kernel_size, self.strides, input_shape, self.data_format
+        )
+        self.kernel.assign(self.kernel.constraint(self.kernel))
+
+    def call(self, inputs):
+        return super().call(inputs)
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        return (
+            self._get_coef()
+            * np.sqrt(np.prod(self.kernel_size))
+            * input_bound
+            * gradient_bound
+        )
 
     def backpropagate_inputs(self, input_bound, gradient_bound):
         return 1 * gradient_bound
