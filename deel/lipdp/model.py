@@ -228,11 +228,13 @@ class DPGD_Mechanism(Mechanism):
 
         if mode == "global":
             model_mech = mechanism_zoo.GaussianMechanism(sigma=noise_multipliers)
+            assert model_mech.neighboring == "add_remove"
         elif mode == "local":
             layer_mechanisms = []
 
             for sigma in noise_multipliers:
                 mech = mechanism_zoo.GaussianMechanism(sigma=sigma)
+                assert model_mech.neighboring == "add_remove"
                 layer_mechanisms.append(mech)
 
             # Accountant composition on layers
@@ -262,6 +264,8 @@ class DPGD_Mechanism(Mechanism):
                 [SubsampledModelGaussian_mech, DynamicClippingMech],
                 [num_grad_steps, dynamic_clipping["num_updates"]],
             )
+
+        assert global_mech.neighboring in ["add_remove", "add_only", "remove_only"]
 
         # Get relevant information
         self.epsilon = global_mech.get_approxDP(delta=delta)
@@ -443,11 +447,11 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
     noises = []
     for grad, var in zip(gradients, trainable_vars):
         if var.name in gradient_bounds.keys():
+            # no factor-2 : use add_remove definition of DP
             stddev = (
                 model.dp_parameters.noise_multiplier
                 * gradient_bounds[var.name]
                 * nm_coefs[var.name]
-                * 2
             )
             noises.append(tf.random.normal(shape=tf.shape(grad), stddev=stddev))
             if model.debug:
@@ -487,6 +491,7 @@ def global_noisify(model, gradient_bounds, trainable_vars, gradients):
     global_sensitivity = tf.math.sqrt(
         tf.math.reduce_sum([bound**2 for bound in gradient_bounds.values()])
     )
+    # no factor-2 : use add_remove definition of DP.
     stddev = model.dp_parameters.noise_multiplier * global_sensitivity
     noises = [tf.random.normal(shape=tf.shape(g), stddev=stddev) for g in gradients]
     if model.debug:
