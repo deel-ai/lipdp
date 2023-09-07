@@ -46,9 +46,22 @@ class DatasetMetadata:
     max_norm: float
 
 
+def standardize_CIFAR(image):
+    """Standardize the image with the CIFAR10 mean and std dev.
+
+    Args:
+        image (tf.Tensor): image to standardize of shape (H,W,C) of type tf.float32.
+    """
+    CIFAR10_MEAN = tf.constant([[[0.4914, 0.4822, 0.4465]]], dtype=tf.float32)
+    CIFAR10_STD_DEV = tf.constant([[[0.2023, 0.1994, 0.2010]]], dtype=tf.float32)
+    return (image - CIFAR10_MEAN) / CIFAR10_STD_DEV
+
+
 def get_colorspace_function(colorspace: str):
     if colorspace.upper() == "RGB":
         return lambda x, y: (x, y)
+    elif colorspace.upper() == "RGB_STANDARDIZED":
+        return lambda x, y: (standardize_CIFAR(x), y)
     elif colorspace.upper() == "HSV":
         return lambda x, y: (tf.image.rgb_to_hsv(x), y)
     elif colorspace.upper() == "YIQ":
@@ -75,7 +88,7 @@ def bound_normalize():
     return bound, 1.0
 
 
-def load_and_prepare_data(
+def load_and_prepare_images_data(
     dataset_name: str = "mnist",
     batch_size: int = 256,
     colorspace: str = "RGB",
@@ -84,7 +97,7 @@ def load_and_prepare_data(
     bound_fct=None,
 ):
     """
-    load dataset_name data using tensorflow datasets.
+    Load dataset_name image dataset using tensorflow datasets.
 
     Args:
         dataset_name (str): name of the dataset to load.
@@ -124,7 +137,7 @@ def load_and_prepare_data(
     if bound_fct is None:
         bound_fct = (
             lambda x, y: (x, y),
-            input_shape[-3] * input_shape[-2] * input_shape[-1],
+            float(input_shape[-3] * input_shape[-2] * input_shape[-1]),
         )
     bound_callable, bound_val = bound_fct
     # train pipeline
@@ -185,3 +198,19 @@ def load_and_prepare_data(
     )
 
     return ds_train, ds_test, metadata
+
+
+def default_delta_value(dataset_metadata):
+    """Default policy to set delta value.
+
+    Args:
+        dataset_metadata (DatasetMetadata): metadata of the dataset.
+
+    Returns:
+        float: default delta value.
+    """
+    n = dataset_metadata.nb_samples_train
+    smallest_power10_bigger = 10 ** np.ceil(np.log10(n))
+    delta = float(1 / smallest_power10_bigger)
+    print("Default delta value: {delta}")
+    return delta

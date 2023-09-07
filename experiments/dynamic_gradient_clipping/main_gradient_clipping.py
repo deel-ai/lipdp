@@ -33,28 +33,27 @@ from tensorflow.keras.callbacks import ReduceLROnPlateau
 
 import deel.lipdp.layers as DP_layers
 from deel.lipdp import losses
-from deel.lipdp.model import AdaptiveLossGradientClipping
+from deel.lipdp.dynamic import LaplaceAdaptiveLossGradientClipping
 from deel.lipdp.model import DP_Accountant
 from deel.lipdp.model import DP_Sequential
 from deel.lipdp.model import DPParameters
 from deel.lipdp.pipeline import bound_clip_value
-from deel.lipdp.pipeline import load_and_prepare_data
+from deel.lipdp.pipeline import load_and_prepare_images_data
 from deel.lipdp.sensitivity import get_max_epochs
 
 # declare the privacy parameters
 dp_parameters = DPParameters(
-    noisify_strategy="global",
-    noise_multiplier=1.2,
+    noisify_strategy="per-layer",
+    noise_multiplier=3.0,
     delta=1e-5,
 )
 
-ds_train, ds_test, dataset_metadata = load_and_prepare_data(
+ds_train, ds_test, dataset_metadata = load_and_prepare_images_data(
     "cifar10",
-    batch_size=4096,
-    colorspace="HSV",
-    drop_remainder=True,  # accounting assumes fixed batch size
+    batch_size=5_000,
+    colorspace="RGB_STANDARDIZED",
     bound_fct=bound_clip_value(
-        10.0
+        3.0
     ),  # clipping preprocessing allows to control input bound
 )
 
@@ -77,7 +76,7 @@ layers = [
         units=10, use_bias=False, kernel_initializer="orthogonal"
     ),
     DP_layers.DP_ClipGradient(
-        clip_value=None, epsilon=1, patience=5
+        clip_value=None, epsilon=1.0, patience=1
     ),  # for fixed clipping use clip_value = cste
 ]
 
@@ -85,11 +84,11 @@ model = DP_Sequential(
     layers=layers, dp_parameters=dp_parameters, dataset_metadata=dataset_metadata
 )
 
-loss = losses.DP_TauCategoricalCrossentropy(14.5)
+loss = losses.DP_TauCategoricalCrossentropy(20.0)
 
 model.compile(
     loss=loss,
-    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+    optimizer=tf.keras.optimizers.SGD(learning_rate=3e-2, momentum=0.95),
     metrics=["accuracy"],
     run_eagerly=False,
 )
@@ -98,7 +97,7 @@ num_epochs = get_max_epochs(8.0, model)
 
 callbacks = [
     DP_Accountant(log_fn="logging"),
-    AdaptiveLossGradientClipping(
+    LaplaceAdaptiveLossGradientClipping(
         ds_train=ds_train
     ),  # DO NOT USE THIS CALLBACK WHEN mode != "dynamic_svt"
     ReduceLROnPlateau(monitor="val_accuracy", factor=0.9, min_delta=0.01, patience=3),
