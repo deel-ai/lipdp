@@ -1,83 +1,3 @@
-# Purpose of this library :
-
-Conventionally, Differentially Private ML training relies on Gradient Clipping to guarantee verifiable privacy guarantees.
-By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based
-DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
-batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
-
-Therefore, the computation time is heavily reduced and the results on the MNIST and CIFAR10 datasets are the following :
-
-
-# Status of the repository : 
-
-- ci tests to develop.
-- sensitivity.py to debug.
-- requirements.txt tested on my machine, still to check by someone else.
-
-# Deel library repository template
-
-Ce dépôt git sert de template pour les librairies DEEL ayant vocation à être rendues publiques sur github.
-Il donne la structure des répertoires d'un projet telle que celle adoptée par les librairies DEEL déjà publiques.
-
-A la racine du projet on trouve:
-
-- deel : répertoire destiné à recevoir le code de la librairie. C'est le premier mot de l'espaces de nommage de
-        la librairie. Ce n'est pas un module python, il ne contient donc pas de fichier __init__.py.
-        Il contient le module principal de la librairie du nom de cette librairie.
-        
-        Example: 
-        
-        librairie **deel-lip**:
-                    deel/deel-lip       
-
-- docs: répertoire destiné à la documentation de la librairie
-
-- tests: répertoire des tests unitaires
-
-- .pre-commit-config.yaml : configuration de outil de contrôle avant commit (pre-commit)
-
-- LICENCE/headers/MIT-Clause.txt : entête licence MIT injectée dans les fichiers du projet
-
-- CONTRIBUTING.md: description de la procédure pour apporter une contribution à la librairie.
-
-- GOUVERNANCE.md: description de la manière dont la librairie est gérée.
-
-- LICENCE : texte de la licence sous laquelle est publiée la librairie (MIT).
-
-- README.md 
-
-
-# pre-commit : Conventional Commits 1.0.0
-
-The commit message should be structured as follows:
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-
-```
-
-The commit contains the following structural elements, to communicate intent to the consumers of your library:
-
-- fix: a commit of the type fix patches a bug in your codebase (this correlates with PATCH in Semantic Versioning).
-
-- feat: a commit of the type feat introduces a new feature to the codebase (this correlates with MINOR in Semantic Versioning).
-
-- BREAKING CHANGE: a commit that has a footer BREAKING CHANGE:, or appends a ! after the type/scope, introduces a breaking API change (correlating with MAJOR in Semantic Versioning). A BREAKING CHANGE can be part of commits of any type.
-
-- types other than fix: and feat: are allowed, for example @commitlint/config-conventional (based on the the Angular convention) recommends *build:, chore:, ci:, docs:, style:, refactor:, perf:, test:*, and [others](https://delicious-insights.com/fr/articles/git-hooks-et-commitlint/).
- 
-- footers other than BREAKING CHANGE: <description> may be provided and follow a convention similar to git trailer format.
-
-- Additional types are not mandated by the Conventional Commits specification, and have no implicit effect in Semantic Versioning (unless they include a BREAKING CHANGE). A scope may be provided to a commit’s type, to provide additional contextual information and is contained within parenthesis, e.g., feat(parser): add ability to parse arrays.
-
-# README sections
-
-The following should be used as a template for the README of your library. Of course, depending on what you are doing not all sections are necessary but try to keep the order of the sections.
-
 <!-- Banner section -->
 <div align="center">
         <picture>
@@ -91,7 +11,7 @@ The following should be used as a template for the README of your library. Of co
 <!-- Badge section -->
 <div align="center">
     <a href="#">
-        <img src="https://img.shields.io/badge/Python-3.6, 3.7, 3.8-efefef">
+        <img src="https://img.shields.io/badge/Python-3.7, 3.8, 3.9-efefef">
     </a>
     <a href="#">
         <img src="https://img.shields.io/badge/License-MIT-efefef">
@@ -101,7 +21,7 @@ The following should be used as a template for the README of your library. Of co
 
 <!-- Short description of your library -->
 <p align="center">
-  <b>Libname</b> is a Python toolkit dedicated to make people happy and fun.
+  <b>LipDP</b> is a Python toolkit dedicated to make people happy and fun.
 
   <!-- Link to the documentation -->
   <br>
@@ -109,6 +29,15 @@ The following should be used as a template for the README of your library. Of co
   <br>
 
 </p>
+
+Conventionally, Differentially Private ML training relies on Gradient Clipping to guarantee verifiable privacy guarantees.
+By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based
+DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
+batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
+
+![backpropforbounds](./docs/assets/backprop_v2.png)
+
+Therefore the computation time is competitive with existing methods.
 
 ## 📚 Table of contents
 
@@ -131,17 +60,21 @@ We propose some tutorials to get familiar with the library and its api:
 
 You do not necessarily need to register the notebooks on the GitHub. Notebooks can be hosted on a specific [drive](https://drive.google.com/drive/folders/1DOI1CsL-m9jGjkWM1hyDZ1vKmSU1t-be).
 
-## 🚀 Quick Start
+## 🚀 Setup
 
 Libname requires some stuff and several libraries including Numpy. Installation can be done using Pypi:
 
 ```python
-pip install libname
+pip install scipy<=1.9.3 numpy pandas matplotlib
+pip install autodp
+pip install tensorflow
+pip install tensorflow-datasets
+pip install deel-lip
 ```
 
 Now that Libname is installed, here are some basic examples of what you can do with the available modules.
 
-### Print Hello World
+### Load a dataset
 
 Let's start with a simple example:
 
@@ -151,16 +84,25 @@ from libname.fake import hello_world
 hello_world()
 ```
 
-### Make addition
+### Setup privacy parameters
 
-In order to add `a` to `b` you can use:
+### Setup DP model
+
+### Setup accountant
+
+The privacy accountant is composed of different mechanisms from `autodp` package that are combined to provide a privacy accountant for Clipless DP-SGD algorithm:
+
+![rdpaccountant](./docs/assets/fig_accountant.png)
+
+
+Adding a privacy accountant to your model is straighforward:
 
 ```python
-from libname.fake import addition
+from deel.lipdp.model import DP_Accountant
 
-a = 1
-b = 2
-c = addition(a, b)
+callbacks = [
+  DP_Accountant()
+]
 ```
 
 ## 📦 What's Included
@@ -175,9 +117,11 @@ Feel free to propose your ideas or come and contribute with us on the Libname to
 
 This library is one approach of many...
 
-Other tools to explain your model include:
+Other tools to perform DP-training include:
 
-- [Random](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
+- [tensorflow-privacy](https://github.com/tensorflow/privacy) in Tensorflow
+- [Opacus](https://opacus.ai/) in Pytorch
+- [jax-privacy](https://github.com/google-deepmind/jax_privacy) in Jax
 
 More from the DEEL project:
 
@@ -205,14 +149,14 @@ If you want to highlights the main contributors
 
 ## 🗞️ Citation
 
-If you use Libname as part of your workflow in a scientific publication, please consider citing the 🗞️ [our paper](https://www.youtube.com/watch?v=dQw4w9WgXcQ):
+If you use Libname as part of your workflow in a scientific publication, please consider citing the 🗞️ [our paper](https://arxiv.org/abs/2305.16202):
 
 ```
-@article{rickroll,
-  title={Rickrolling},
-  author={Some Internet Trolls},
-  journal={Best Memes},
-  year={ND}
+@article{bethune2023dp,
+  title={DP-SGD Without Clipping: The Lipschitz Neural Network Way},
+  author={B{\'e}thune, Louis and Mass{\'e}na, Thomas and Boissin, Thibaut and Prudent, Yannick and Friedrich, Corentin and Mamalet, Franck and Bellet, Aurelien and Serrurier, Mathieu and Vigouroux, David},
+  journal={arXiv preprint arXiv:2305.16202},
+  year={2023}
 }
 ```
 
