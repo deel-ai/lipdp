@@ -144,7 +144,9 @@ def create_MLP_Mixer(dp_parameters, dataset_metadata, cfg, upper_bound):
         DP_QuickSpectralDense(units=10, use_bias=False, kernel_initializer="identity")
     )
     if cfg.clip_loss_gradient is not None:
-        layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
+        layers.append(
+            DP_ClipGradient(cfg.clip_loss_gradient, mode=cfg.dynamic_clipping)
+        )
 
     model = DP_Model(
         layers,
@@ -276,7 +278,7 @@ def VGG_factory(
 
     layers.append(DP_SpectralDense(10, use_bias=False, kernel_initializer="orthogonal"))
     layers.append(DP_AddBias(norm_max=1))
-    layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
+    layers.append(DP_ClipGradient(cfg.clip_loss_gradient, mode=cfg.dynamic_clipping))
 
     # Remove DP_AddBias and DP_LayerCentering layers if required
     if cfg.add_biases is False:
@@ -426,7 +428,9 @@ def create_ResNet(dp_parameters, dataset_metadata, cfg, upper_bound):
     layers += [
         DP_ScaledGlobalL2NormPooling2D(name="globalpool1"),
         DP_SpectralDense(classes, use_bias=False, name="fc1"),
-        DP_ClipGradient(cfg.clip_loss_gradient, name="clipgrad"),
+        DP_ClipGradient(
+            cfg.clip_loss_gradient, mode=cfg.dynamic_clipping, name="clipgrad"
+        ),
     ]
 
     model = DP_Model(

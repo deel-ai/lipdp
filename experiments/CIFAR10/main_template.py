@@ -22,6 +22,7 @@
 # SOFTWARE.
 import numpy as np
 import tensorflow as tf
+import wandb
 from absl import app
 from ml_collections import config_dict
 from ml_collections import config_flags
@@ -29,9 +30,9 @@ from models_CIFAR import create_ResNet
 from models_CIFAR import create_VGG
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
+from wandb.keras import WandbCallback
 
 import deel.lipdp.layers as DP_layers
-import wandb
 from deel.lipdp import losses
 from deel.lipdp.dynamic import AdaptiveQuantileClipping
 from deel.lipdp.dynamic import LaplaceAdaptiveLossGradientClipping
@@ -42,9 +43,8 @@ from deel.lipdp.pipeline import bound_clip_value
 from deel.lipdp.pipeline import default_delta_value
 from deel.lipdp.pipeline import load_and_prepare_images_data
 from deel.lipdp.sensitivity import get_max_epochs
-from wandb.keras import WandbCallback
-from wandb_sweeps.src_config.wandb_utils import init_wandb
-from wandb_sweeps.src_config.wandb_utils import run_with_wandb
+from experiments.wandb_utils import init_wandb
+from experiments.wandb_utils import run_with_wandb
 
 
 def default_cfg_cifar10():
@@ -284,9 +284,6 @@ def train():
     callbacks = [
         WandbCallback(save_model=False, monitor="val_accuracy"),
         DP_Accountant(),
-        # not necessary for DP-training since training is stopped when budget is reached:
-        #  EarlyStopping(monitor="val_accuracy", min_delta=0.001, patience=15),
-        #  ReduceLROnPlateau(monitor="val_accuracy", factor=0.5, min_delta=0.001, patience=5),
     ]
 
     ########################
@@ -348,7 +345,7 @@ def train():
 
 
 def main(_):
-    run_with_wandb(cfg=cfg, train_function=train, project="CIFAR10_dynamic_clipping")
+    run_with_wandb(cfg=cfg, train_function=train, project="ICLR_Cifar10_acc")
 
 
 if __name__ == "__main__":

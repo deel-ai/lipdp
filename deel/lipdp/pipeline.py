@@ -212,5 +212,5 @@ def default_delta_value(dataset_metadata):
     n = dataset_metadata.nb_samples_train
     smallest_power10_bigger = 10 ** np.ceil(np.log10(n))
     delta = float(1 / smallest_power10_bigger)
-    print("Default delta value: {delta}")
+    print(f"Default delta value: {delta}")
     return delta

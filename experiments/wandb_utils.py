@@ -23,10 +23,9 @@
 import os
 from typing import Callable
 
+import wandb
 import yaml
 from ml_collections.config_dict import ConfigDict
-
-import wandb
 
 
 def init_wandb(cfg: ConfigDict, project: str):
