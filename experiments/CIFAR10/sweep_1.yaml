@@ -1,0 +1,27 @@
+method: bayes
+metric:
+  name: val_accuracy
+  goal: maximize
+parameters:
+  noise_multiplier:
+    min: 0.8
+    max: 5.0
+    distribution: uniform
+  learning_rate:
+    min: 0.0001
+    max: 0.1
+    distribution: log_uniform_values
+  batch_size:
+    values: [1000, 2000, 2500, 5000]
+    distribution: categorical
+  input_clipping:
+    min: 1.0
+    max: 4.0
+    distribution: uniform
+  tau:
+    min: 1.0
+    max: 50.0
+    distribution: log_uniform_values
+  epsilon_max:
+    value: 10.0
+    distribution: constant_value
