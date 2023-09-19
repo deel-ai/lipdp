@@ -20,56 +20,16 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from os import path
+import tensorflow as tf
 
-with open(path.join(path.dirname(__file__), "VERSION")) as f:
-    __version__ = f.read().strip()
 
-from deel.lipdp.layers import (
-    DP_ScaledL2NormPooling2D,
-    DP_Flatten,
-    DP_SpectralConv2D,
-    DP_SpectralDense,
-    DP_QuickFrobeniusDense,
-    DP_Reshape,
-    DP_Lambda,
-    DP_Permute,
-    DP_Reshape,
-    DP_GroupSort,
-    DP_InputLayer,
-    DP_BoundedInput,
-    DP_Flatten,
-    DP_ClipGradient,
-    DP_AddBias,
-    DP_LayerCentering,
-    DPLayer,
-    make_residuals,
-)
-from deel.lipdp.losses import (
-    DP_KCosineSimilarity,
-    DP_MeanAbsoluteError,
-    DP_MulticlassHinge,
-    DP_MulticlassHKR,
-    DP_MulticlassKR,
-    DP_TauCategoricalCrossentropy,
-)
-from deel.lipdp.accounting import DPGD_Mechanism
-from deel.lipdp.dynamic import LaplaceAdaptiveLossGradientClipping
-from deel.lipdp.model import (
-    DP_Model,
-    DP_Sequential,
-    DP_Accountant,
-)
-from deel.lipdp.pipeline import (
-    load_adbench_data,
-    prepare_tabular_data,
-    load_and_prepare_images_data,
-    bound_clip_value,
-    bound_normalize,
-)
-from deel.lipdp.sensitivity import (
-    get_max_epochs,
-    gradient_norm_check,
-    check_layer_gradient_norm,
-)
-from deel.lipdp.utils import CertifiableAUROC
+class CertifiableAUROC(tf.keras.metrics.AUC):
+    def __init__(self, radius, **kwargs):
+        super().__init__(**kwargs)
+        self.radius = radius
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        # y_pred is 1-Lipschitz wrt the input and labels are in {-1, 1}
+        labels = 2 * tf.cast(y_true, tf.float32) - 1
+        y_pred = y_pred - labels * self.radius
+        return super().update_state(y_true, y_pred, sample_weight=sample_weight)

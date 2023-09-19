@@ -27,7 +27,6 @@ from ml_collections import config_dict
 from ml_collections import config_flags
 
 import deel.lipdp.layers as DP_layers
-import wandb
 from deel.lip.metrics import CategoricalProvableRobustAccuracy
 from deel.lipdp import losses
 from deel.lipdp.dynamic import AdaptiveQuantileClipping
@@ -46,20 +45,21 @@ from wandb.keras import WandbCallback
 
 def default_cfg_cifar10():
     cfg = config_dict.ConfigDict()
-    cfg.batch_size = 2_500  # 10% of the dataset.
+    cfg.batch_size = 2_500  # 5% of the dataset.
     cfg.clip_loss_gradient = None  # not required for dynamic clipping.
+    cfg.depth = 1
     cfg.dynamic_clipping = "quantiles"  # can be "fixed", "laplace", "quantiles". "fixed" requires a clipping value.
     cfg.dynamic_clipping_quantiles = (
         0.9  # crop to 90% of the distribution of gradient norm.
     )
     cfg.delta = 1e-5  # 1e-5 is the default value in the paper.
-    cfg.epsilon_max = 10.0  # budget!
+    cfg.epsilon_max = 20.0  # budget!
     cfg.input_bound = 3.0  # 15.0 works well in RGB non standardized.
     cfg.learning_rate = 8e-2  # works well for vanilla SGD.
     cfg.log_wandb = "disabled"
     cfg.loss = "TauCategoricalCrossentropy"
-    cfg.opt_iterations = None  # num of runs for the meta-optimizer of wandb.
-    cfg.noise_multiplier = 1.2
+    cfg.multiplicity = 4
+    cfg.noise_multiplier = 3.0
     cfg.noisify_strategy = "per-layer"
     cfg.representation = "RGB_STANDARDIZED"  # "RGB", "RGB_STANDARDIZED", "HSV".
     cfg.optimizer = "SGD"
@@ -67,16 +67,18 @@ def default_cfg_cifar10():
     cfg.sweep_yaml_config = ""  # useful to load a sweep from a yaml file.
     cfg.tau = 20.0  # temperature for the softmax.
     cfg.use_residuals = False  # better without.
+    cfg.width_multiplier = 1
     return cfg
 
 
+project = "ICLR_Cifar10"
 cfg = default_cfg_cifar10()
 _CONFIG = config_flags.DEFINE_config_dict(
     "cfg", cfg
 )  # for FLAGS parsing in command line.
 
 
-def create_MLP_Mixer(dataset_metadata, dp_parameters, use_residuals):
+def create_MLP_Mixer(dataset_metadata, dp_parameters):
     layers = [
         DP_layers.DP_BoundedInput(
             input_shape=dataset_metadata.input_shape,
@@ -85,14 +87,15 @@ def create_MLP_Mixer(dataset_metadata, dp_parameters, use_residuals):
     ]
 
     patch_size = 4
-    num_mixer_layers = 1
+    num_mixer_layers = cfg.depth
     seq_len = (dataset_metadata.input_shape[0] // patch_size) * (
         dataset_metadata.input_shape[1] // patch_size
     )
-    multiplier = 1
+    multiplier = cfg.width_multiplier
     mlp_seq_dim = multiplier * seq_len
     mlp_channel_dim = multiplier * seq_len
     hidden_size = multiplier * seq_len
+    use_residuals = cfg.use_residuals
 
     layers.append(
         DP_layers.DP_Lambda(
@@ -162,7 +165,9 @@ def create_MLP_Mixer(dataset_metadata, dp_parameters, use_residuals):
 
     layers.append(
         DP_layers.DP_QuickSpectralDense(
-            units=10, use_bias=False, kernel_initializer="orthogonal"
+            units=dataset_metadata.nb_classes,
+            use_bias=False,
+            kernel_initializer="orthogonal",
         )
     )
 
@@ -232,7 +237,7 @@ def certifiable_acc_metrics(epsilons):
 
 
 def train():
-    init_wandb(cfg=cfg, project="CIFAR10_dynamic_clipping")
+    init_wandb(cfg=cfg, project=project)
 
     ##########################
     #### Dataset loading #####
@@ -253,6 +258,7 @@ def train():
         colorspace=cfg.representation,
         drop_remainder=True,  # accounting assumes fixed batch size
         bound_fct=bound_fct,
+        multiplicity=cfg.multiplicity,
     )
 
     ##########################
@@ -266,9 +272,7 @@ def train():
         delta=default_delta_value(dataset_metadata),
     )
 
-    model = create_MLP_Mixer(
-        dataset_metadata, dp_parameters, use_residuals=cfg.use_residuals
-    )
+    model = create_MLP_Mixer(dataset_metadata, dp_parameters)
 
     ##########################
     ######## Loss setup ######
@@ -336,7 +340,7 @@ def train():
         adaptive = AdaptiveQuantileClipping(
             ds_train=ds_train,
             patience=1,
-            noise_multiplier=cfg.noise_multiplier * 5,  # more noisy.
+            noise_multiplier=cfg.noise_multiplier * 2,  # more noisy.
             quantile=cfg.dynamic_clipping_quantiles,
             learning_rate=1.0,
         )
@@ -364,7 +368,7 @@ def train():
 
 
 def main(_):
-    run_with_wandb(cfg=cfg, train_function=train, project="ICLR_Cifar10_acc")
+    run_with_wandb(cfg=cfg, train_function=train, project=project)
 
 
 if __name__ == "__main__":

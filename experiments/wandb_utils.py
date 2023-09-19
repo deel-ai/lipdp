@@ -23,9 +23,10 @@
 import os
 from typing import Callable
 
-import wandb
 import yaml
 from ml_collections.config_dict import ConfigDict
+
+import wandb
 
 
 def init_wandb(cfg: ConfigDict, project: str):
@@ -60,9 +61,8 @@ def run_with_wandb(cfg: ConfigDict, train_function: Callable, project: str):
             sweep_id = wandb.sweep(sweep=sweep_config, project=project)
         else:
             sweep_id = cfg.sweep_id
-        wandb.agent(
-            sweep_id, function=train_function, project=project, count=cfg.opt_iterations
-        )
+        count = cfg.sweep_count if "sweep_count" in cfg else None
+        wandb.agent(sweep_id, function=train_function, project=project, count=count)
 
 
 def _sanitize_sweep_config_from_cfg(sweep_config: dict, cfg: ConfigDict) -> dict:
@@ -137,7 +137,7 @@ def _get_default_sweep_config(cfg):
         },
     }
 
-    if cfg.loss == "TauCategoricalCrossentropy":
+    if cfg.loss == "TauCategoricalCrossentropy" or cfg.loss == "TauBCE":
         parameters_loss = {
             "tau": {"max": 200.0, "min": 0.001, "distribution": "log_uniform_values"},
         }

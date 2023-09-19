@@ -346,6 +346,36 @@ class DP_QuickSpectralDense(tf.keras.layers.Dense, DPLayer):
         return True
 
 
+class DP_QuickFrobeniusDense(tf.keras.layers.Dense, DPLayer):
+    def __init__(self, *args, nm_coef=1, **kwargs):
+        if "use_bias" in kwargs and kwargs["use_bias"]:
+            raise ValueError("No bias allowed.")
+        kwargs["use_bias"] = False
+        kwargs.update(
+            dict(
+                kernel_initializer="orthogonal",
+                kernel_constraint="deel-lip>FrobeniusConstraint",
+            )
+        )
+        # Remark: the Frobenius constraint is applied on the whole matrix,
+        # not on each row. Therefore the Lipschitz constant is 1 since:
+        # ||A||_2 <= ||A||_F = 1
+        super().__init__(*args, **kwargs)
+        self.nm_coef = nm_coef
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        return input_bound * gradient_bound
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
+
+    def propagate_inputs(self, input_bound):
+        return input_bound
+
+    def has_parameters(self):
+        return True
+
+
 def _compute_conv_lip_factor(kernel_size, strides, input_shape, data_format):
     """Compute the Lipschitz factor to apply on estimated Lipschitz constant in
     convolutional layer. This factor depends on the kernel size, the strides and the

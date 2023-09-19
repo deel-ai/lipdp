@@ -83,10 +83,10 @@ cfg = default_cfg_mnist()
 _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 
 
-def create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound):
+def create_ConvNet(dp_parameters, dataset_metadata):
     norm_max = 1.0
     all_layers = [
-        DP_BoundedInput(input_shape=(28, 28, 1), upper_bound=upper_bound),
+        DP_BoundedInput(input_shape=(28, 28, 1), upper_bound=dataset_metadata.max_norm),
         DP_SpectralConv2D(
             filters=16,
             kernel_size=3,
@@ -200,8 +200,6 @@ def train():
             delta=default_delta_value(dataset_metadata),
         ),
         dataset_metadata,
-        cfg,
-        upper_bound=dataset_metadata.max_norm,
     )
 
     model = compile_model(model, cfg)
@@ -230,23 +228,6 @@ def train():
         batch_size=cfg.batch_size,
         callbacks=callbacks,
     )
-
-    wandb.log(
-        {
-            "Accuracies": wandb.plot.line_series(
-                xs=[
-                    np.linspace(0, num_epochs, num_epochs + 1),
-                    np.linspace(0, num_epochs, num_epochs + 1),
-                ],
-                ys=[hist.history["accuracy"], hist.history["val_accuracy"]],
-                keys=["Train Accuracy", "Test Accuracy"],
-                title="Train/Test Accuracy",
-                xname="num_epochs",
-            )
-        }
-    )
-    if cfg.save:
-        model.save(f"{cfg.save_folder}/{cfg.model_name}.h5")
 
 
 def main(_):
