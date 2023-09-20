@@ -12,10 +12,10 @@ parameters:
     max: 1.0
     distribution: log_uniform_values
   batch_size:
-    values: [100, 200, 300, 400, 500]
+    values: [1000, 2000, 5000, 10000]
     distribution: categorical
   tau:
-    min: 1.0
+    min: 0.1
     max: 100.0
     distribution: log_uniform_values
   epsilon_max:

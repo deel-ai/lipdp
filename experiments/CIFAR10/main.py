@@ -38,6 +38,7 @@ from deel.lipdp.pipeline import bound_clip_value
 from deel.lipdp.pipeline import default_delta_value
 from deel.lipdp.pipeline import load_and_prepare_images_data
 from deel.lipdp.sensitivity import get_max_epochs
+from deel.lipdp.utils import PrivacyMetrics
 from experiments.wandb_utils import init_wandb
 from experiments.wandb_utils import run_with_wandb
 from wandb.keras import WandbCallback
@@ -53,11 +54,12 @@ def default_cfg_cifar10():
         0.9  # crop to 90% of the distribution of gradient norm.
     )
     cfg.delta = 1e-5  # 1e-5 is the default value in the paper.
-    cfg.epsilon_max = 20.0  # budget!
+    cfg.epsilon_max = None  # budget!
     cfg.input_bound = 3.0  # 15.0 works well in RGB non standardized.
     cfg.learning_rate = 8e-2  # works well for vanilla SGD.
     cfg.log_wandb = "disabled"
     cfg.loss = "TauCategoricalCrossentropy"
+    cfg.mia = False
     cfg.multiplicity = 4
     cfg.noise_multiplier = 3.0
     cfg.noisify_strategy = "per-layer"
@@ -190,12 +192,17 @@ def create_MLP_Mixer(dataset_metadata, dp_parameters):
     return model
 
 
-def get_cifar10_max_norm(verbose=True):
-    (x_train, _), _ = tf.keras.datasets.cifar10.load_data()
+def get_cifar10_standardized(verbose=True):
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     x_train = x_train.astype("float32") / 255.0
+    x_test = x_test.astype("float32") / 255.0
     CIFAR10_MEAN = np.array([0.4914, 0.4822, 0.4465]).reshape((1, 1, 3))
     CIFAR10_STD_DEV = np.array([0.2023, 0.1994, 0.2010]).reshape((1, 1, 3))
     x_train = (x_train - CIFAR10_MEAN) / CIFAR10_STD_DEV
+    x_test = (x_test - CIFAR10_MEAN) / CIFAR10_STD_DEV
+    y_train = y_train.flatten()
+    y_test = y_test.flatten()
+    cifar10 = (x_train, y_train, x_test, y_test)
     all_norms = np.linalg.norm(x_train, axis=-1)
     if verbose:
         print(f"Dataset Max norm: {np.max(all_norms)}")
@@ -204,9 +211,11 @@ def get_cifar10_max_norm(verbose=True):
         print(f"Dataset Std norm: {np.std(all_norms)}")
         quantiles = [0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99]
         print(f"Dataset Quantiles: {np.quantile(all_norms, quantiles)} at {quantiles}")
+    # We assume no privacy loss to estimate the max norm, the mean pixel value and the std pixel value.
+    # This is a reasonable assumption shared by many papers. If necessary, they can be estimated privately.
     max_norm = np.max(all_norms)
     max_norm = max_norm.astype(np.float32)
-    return max_norm
+    return cifar10, max_norm
 
 
 def certifiable_acc_metrics(epsilons):
@@ -246,7 +255,7 @@ def train():
     # clipping preprocessing allows to control input bound
     input_bound = cfg.input_bound
     if cfg.representation == "RGB_STANDARDIZED":
-        max_norm_cifar10 = get_cifar10_max_norm(verbose=True)
+        cifar10_standardized, max_norm_cifar10 = get_cifar10_standardized(verbose=True)
         if input_bound is None:
             input_bound = max_norm_cifar10
             print(f"Max norm set to {input_bound}")
@@ -350,14 +359,22 @@ def train():
         raise ValueError(f"Unknown clipping strategy {cfg.dynamic_clipping}")
 
     ########################
+    ###### MIA attack ######
+    ########################
+
+    if cfg.mia:
+        privacy_metrics = PrivacyMetrics(cifar10_standardized)
+        callbacks.append(privacy_metrics)
+
+    ########################
     ### Training process ###
     ########################
 
     if cfg.epsilon_max is None:
-        num_epochs = 50  # useful for debugging.
+        num_epochs = 1  # useful for debugging.
     else:
         # compute the max number of epochs to reach the budget.
-        num_epochs = get_max_epochs(cfg.epsilon_max, model)
+        num_epochs = get_max_epochs(cfg.epsilon_max, model, safe=True)
 
     hist = model.fit(
         ds_train,
@@ -365,6 +382,9 @@ def train():
         validation_data=ds_test,
         callbacks=callbacks,
     )
+
+    if cfg.mia:
+        privacy_metrics.log_report()
 
 
 def main(_):

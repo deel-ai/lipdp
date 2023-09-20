@@ -50,7 +50,7 @@ def default_cfg_cifar10():
     cfg.batch_size = 200
     cfg.clip_loss_gradient = None  # not required for dynamic clipping.
     cfg.depth = 2
-    cfg.dataset_name = "22_magic.gamma"
+    cfg.dataset_name = "11_donors"
     cfg.dynamic_clipping = "quantiles"  # can be "fixed", "laplace", "quantiles". "fixed" requires a clipping value.
     cfg.dynamic_clipping_quantiles = 0.9
     cfg.delta = 1e-5
@@ -225,7 +225,7 @@ def train():
         num_epochs = 50  # useful for debugging.
     else:
         # compute the max number of epochs to reach the budget.
-        num_epochs = get_max_epochs(cfg.epsilon_max, model)
+        num_epochs = get_max_epochs(cfg.epsilon_max, model, safe=False)
 
     hist = model.fit(
         ds_train,

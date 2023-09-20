@@ -1,6 +1,6 @@
 method: bayes
 metric:
-  name: val_accuracy
+  name: val_certacc_2
   goal: maximize
 parameters:
   noise_multiplier:
