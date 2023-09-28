@@ -26,6 +26,8 @@ import numpy as np
 import tensorflow as tf
 
 import deel.lip
+from deel.lip.constraints import SpectralConstraint
+from deel.lip.normalizers import DEFAULT_EPS_BJORCK
 
 
 class DPLayer:
@@ -344,6 +346,114 @@ class DP_QuickSpectralDense(tf.keras.layers.Dense, DPLayer):
         return True
 
 
+class DP_QuickFrobeniusDense(tf.keras.layers.Dense, DPLayer):
+    def __init__(self, *args, nm_coef=1, **kwargs):
+        if "use_bias" in kwargs and kwargs["use_bias"]:
+            raise ValueError("No bias allowed.")
+        kwargs["use_bias"] = False
+        kwargs.update(
+            dict(
+                kernel_initializer="orthogonal",
+                kernel_constraint="deel-lip>FrobeniusConstraint",
+            )
+        )
+        # Remark: the Frobenius constraint is applied on the whole matrix,
+        # not on each row. Therefore the Lipschitz constant is 1 since:
+        # ||A||_2 <= ||A||_F = 1
+        super().__init__(*args, **kwargs)
+        self.nm_coef = nm_coef
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        return input_bound * gradient_bound
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
+
+    def propagate_inputs(self, input_bound):
+        return input_bound
+
+    def has_parameters(self):
+        return True
+
+
+def _compute_conv_lip_factor(kernel_size, strides, input_shape, data_format):
+    """Compute the Lipschitz factor to apply on estimated Lipschitz constant in
+    convolutional layer. This factor depends on the kernel size, the strides and the
+    input shape.
+
+    Copied from deel-lip.
+    """
+    stride = np.prod(strides)
+    kh, kw = kernel_size[0], kernel_size[1]
+    kh_div2 = (kh - 1) / 2
+    kw_div2 = (kw - 1) / 2
+
+    if data_format == "channels_last":
+        h, w = input_shape[-3], input_shape[-2]
+    elif data_format == "channels_first":
+        h, w = input_shape[-2], input_shape[-1]
+    else:
+        raise RuntimeError("data_format not understood: " % data_format)
+
+    if stride == 1:
+        return np.sqrt(
+            (w * h)
+            / ((kh * h - kh_div2 * (kh_div2 + 1)) * (kw * w - kw_div2 * (kw_div2 + 1)))
+        )
+    else:
+        return np.sqrt(1.0 / (np.ceil(kh / strides[0]) * np.ceil(kw / strides[1])))
+
+
+class DP_QuickSpectralConv2D(tf.keras.layers.Conv2D, DPLayer):
+    def __init__(self, *args, nm_coef=1, orthogonal=True, **kwargs):
+        if "use_bias" in kwargs and kwargs["use_bias"]:
+            raise ValueError("No bias allowed.")
+        kwargs["use_bias"] = False
+        eps_bjorck = DEFAULT_EPS_BJORCK if orthogonal else None
+        constraint = SpectralConstraint(eps_bjorck=eps_bjorck)
+        kwargs.update(
+            dict(
+                kernel_initializer="orthogonal",
+                kernel_constraint=constraint,
+            )
+        )
+        super().__init__(*args, **kwargs)
+        self.nm_coef = nm_coef
+
+    def _get_coef(self):
+        return _compute_conv_lip_factor(
+            self.kernel_size, self.strides, self.input_shape, self.data_format
+        )
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        self.built = True
+        self.kernel.constraint.k_coef_lip = _compute_conv_lip_factor(
+            self.kernel_size, self.strides, input_shape, self.data_format
+        )
+        self.kernel.assign(self.kernel.constraint(self.kernel))
+
+    def call(self, inputs):
+        return super().call(inputs)
+
+    def backpropagate_params(self, input_bound, gradient_bound):
+        return (
+            self._get_coef()
+            * np.sqrt(np.prod(self.kernel_size))
+            * input_bound
+            * gradient_bound
+        )
+
+    def backpropagate_inputs(self, input_bound, gradient_bound):
+        return 1 * gradient_bound
+
+    def propagate_inputs(self, input_bound):
+        return input_bound
+
+    def has_parameters(self):
+        return True
+
+
 class DP_SpectralConv2D(deel.lip.layers.SpectralConv2D, DPLayer):
     def __init__(self, *args, nm_coef=1, **kwargs):
         if "use_bias" in kwargs and kwargs["use_bias"]:
@@ -401,31 +511,35 @@ class DP_ClipGradient(tf.keras.layers.Layer, DPLayer):
                             The maximum norm of the gradient allowed. Only
                             declare this variable if you plan on using the "fixed" clipping mode.
                             Otherwise it will be updated automatically.
-        patience (int): Determines how often dynamic clipping updates occur, measured in epochs.
-        epsilon (float): Represents the privacy guarantees provided by the clipping constant update using the Sparse Vector Technique (SVT).
+        mode (str): The mode of clipping. Either "fixed" or "dynamic". Default is "fixed".
 
-    Warning : The mode "dynamic_svt" needs to be used along with the AdaptiveLossGradientClipping callback
-    from the deel.lipdp.model module.
+    Warning : The mode "dynamic" needs to be used along a callback that updates the clipping value.
     """
 
-    def __init__(self, clip_value, epsilon=None, patience=1, *args, **kwargs):
+    def __init__(self, clip_value, mode="fixed", *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if clip_value is None:
-            self.mode = "dynamic_svt"
-            # Change type back to float in case clip_value needs to be updated
-            clip_value = 0.0
-            assert (
-                epsilon is not None
-            ), "epsilon has to be defined in arguments for dynamic gradient clipping."
-            assert epsilon > 0, "epsilon <= 0 impossible."
-        else:
-            self.mode = "fixed"
+        self._dynamic_dp_dict = {}  # to be filled by the callback
 
-        self.patience = patience
-        self.initial_value = clip_value
-        self.epsilon = epsilon
+        assert mode in ["fixed", "dynamic"]
+        self.mode = mode
+
+        assert clip_value is None or clip_value >= 0, "clip_value must be positive"
+        if mode == "fixed":
+            assert (
+                clip_value is not None
+            ), "clip_value must be declared when using the fixed mode"
+
+        if clip_value is None:
+            clip_value = (
+                0.0  # Change type back to float in case clip_value needs to be updated
+            )
+
         self.clip_value = tf.Variable(clip_value, trainable=False, dtype=tf.float32)
+
+    def update_clipping_value(self, new_clip_value):
+        print("Update clipping value to : ", float(new_clip_value.numpy()))
+        self.clip_value.assign(new_clip_value)
 
     def call(self, inputs, *args, **kwargs):
         batch_size = tf.convert_to_tensor(tf.cast(tf.shape(inputs)[0], tf.float32))

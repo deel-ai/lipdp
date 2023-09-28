@@ -44,7 +44,30 @@ from deel.lipdp.model import DP_Sequential
 
 
 def create_MLP_Mixer(dp_parameters, dataset_metadata, cfg, upper_bound):
-    input_shape = (32, 32, 3)
+    """Creates a MLP-Mixer network.
+
+    The cfg object must contain some information:
+        - cfg.add_biases (bool): DP_AddBias layers after each linear layer.
+        - cfg.layer_centering (bool): DP_LayerCentering layers after each activation.
+        - cfg.skip_connections (bool): skip connections in the MLP-Mixer network.
+        - cfg.num_mixer_layers (int): number of mixer layers.
+        - cfg.patch_size (int): size of the patches.
+        - cfg.hidden_size (int): size of the hidden layer.
+        - cfg.mlp_seq_dim (int): size of the hidden layer in the MLP block.
+        - cfg.mlp_channel_dim (int): size of the hidden layer in the channel block.
+        - cfg.clip_loss_gradient (float): clip the gradient of the loss to this value.
+
+    Args:
+        dp_parameters: parameters for differentially private training
+        dataset_metadata: metadata of the dataset, for privacy accounting
+        cfg: configuration containing information for DP_Sequential and MLP-Mixer
+            hyper-parameters
+        upper_bound (float): maximum norm of the input (clipped if input norm is higher)
+
+    Returns:
+        DP_Sequential: DP MLP-Mixer network
+    """
+    input_shape = dataset_metadata.input_shape
     layers = [DP_BoundedInput(input_shape=input_shape, upper_bound=upper_bound)]
 
     layers.append(
@@ -121,7 +144,9 @@ def create_MLP_Mixer(dp_parameters, dataset_metadata, cfg, upper_bound):
         DP_QuickSpectralDense(units=10, use_bias=False, kernel_initializer="identity")
     )
     if cfg.clip_loss_gradient is not None:
-        layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
+        layers.append(
+            DP_ClipGradient(cfg.clip_loss_gradient, mode=cfg.dynamic_clipping)
+        )
 
     model = DP_Model(
         layers,
@@ -253,7 +278,7 @@ def VGG_factory(
 
     layers.append(DP_SpectralDense(10, use_bias=False, kernel_initializer="orthogonal"))
     layers.append(DP_AddBias(norm_max=1))
-    layers.append(DP_ClipGradient(cfg.clip_loss_gradient))
+    layers.append(DP_ClipGradient(cfg.clip_loss_gradient, mode=cfg.dynamic_clipping))
 
     # Remove DP_AddBias and DP_LayerCentering layers if required
     if cfg.add_biases is False:
@@ -403,7 +428,9 @@ def create_ResNet(dp_parameters, dataset_metadata, cfg, upper_bound):
     layers += [
         DP_ScaledGlobalL2NormPooling2D(name="globalpool1"),
         DP_SpectralDense(classes, use_bias=False, name="fc1"),
-        DP_ClipGradient(cfg.clip_loss_gradient, name="clipgrad"),
+        DP_ClipGradient(
+            cfg.clip_loss_gradient, mode=cfg.dynamic_clipping, name="clipgrad"
+        ),
     ]
 
     model = DP_Model(

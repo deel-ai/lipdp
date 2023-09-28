@@ -20,160 +20,15 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import math
-import random
 from dataclasses import dataclass
 
-import numpy as np
 import tensorflow as tf
-import tensorflow_datasets as tfds
-from autodp import mechanism_zoo
-from autodp import transformer_zoo
-from autodp.autodp_core import Mechanism
 from tensorflow import keras
 
 import deel
-from deel.lipdp.layers import DP_ClipGradient
+from deel.lipdp.accounting import DPGD_Mechanism
 from deel.lipdp.layers import DPLayer
 from deel.lipdp.pipeline import DatasetMetadata
-
-
-def clipsum(norms, C):
-    """
-    Computes the sum of individually clipped elements from the given list or tensor.
-
-    Args:
-        norms (list or tensor): A list or tensor containing the elements to be clipped and summed.
-        C (float): A clipping constant used to clip the elements.
-
-    Returns:
-        float: The sum of the clipped elements.
-
-    Example:
-        >>> norms = [1.3, 2.7, 7.5]
-        >>> C = 3.0
-        >>> clipsum(norms, C)
-        7.0
-    """
-    norms = tf.cast(norms, dtype=tf.float32)
-    C = tf.constant([C])
-    C = tf.cast(C, dtype=tf.float32)
-    return tf.math.reduce_sum(tf.math.minimum(norms, C))
-
-
-def diff_query(norms, lower, upper, n_points=1000):
-    """
-    Computes the difference between two sums of clipped elements with two different clipping constants
-    on a range of n_points between the lower and upper values.
-
-    Args:
-        norms (list or tensor): A list or tensor of values to be clipped and summed.
-        lower (float or int): The lower bound of the search range.
-        upper (float or int): The upper bound of the search range.
-        n_points (int): The number of points between the lower and upper bound.
-
-    Returns:
-        alpha (float): The sensitivity of the differentiation query, calculated as (upper - lower) / (n_points - 1).
-        points (list): The list of points iterated on between the lower and upper bound.
-        queries (float): The values of the difference query over the points range.
-
-    """
-    points = np.linspace(lower, upper, num=n_points)
-    alpha = (upper - lower) / (n_points - 1)
-    queries = []
-    for p in points:
-        query = clipsum(norms, p) - clipsum(norms, p + alpha)
-        queries.append(query)
-    return alpha, points, queries
-
-
-def above_treshold(queries, sensitivity, T, epsilon):
-    """
-    SVT inspired algorithm inspired from https://programming-dp.com/ch10.html. Computes
-    the index for which the differentiation query of the queries list converges above a
-    treshold T. This computation is epsilon-DP.
-
-    Args :
-        queries (list or tensor) : list of the values of the difference query.
-        sensitivity (float) : sensitivity of the difference computation query.
-        T (float) : value of the treshold.
-        epsilon (float) : chosen epsilon guarantee on the query.
-
-    Returns :
-        ids (int) : the index corresponding the epsilon-DP estimated optimal clipping constant.
-
-    """
-    T_hat = T + np.random.laplace(loc=0, scale=2 * sensitivity / epsilon)
-    for idx, q in enumerate(queries):
-        nu_i = np.random.laplace(loc=0, scale=4 * sensitivity / epsilon)
-        if q + nu_i >= T_hat:
-            return idx
-    return random.randint(0, len(queries) - 1)
-
-
-class AdaptiveLossGradientClipping(keras.callbacks.Callback):
-    """Updates the clipping value of the last layer of the model.
-
-    This callback privately updates the clipping value if the last layer
-    of the model is a DP_ClipGradient layer with mode = "dynamic_svt".
-
-    Attributes :
-        ds_train : a tensorflow dataset object.
-    """
-
-    def __init__(self, ds_train=None):
-        self.ds_train = ds_train
-
-    def on_train_begin(self, logs=None):
-        # Check that callback is called on a model with a clipping layer at the end
-        assert isinstance(self.model.layers_backward_order()[0], DP_ClipGradient)
-        print("On train begin : ")
-        self.model.layers_backward_order()[0].initial_value = tf.convert_to_tensor(
-            self.model.loss.get_L(), dtype=tf.float32
-        )
-        print(
-            "Initial value is now equal to lipschitz constant of loss: ",
-            self.model.layers_backward_order()[0].initial_value,
-        )
-        self.model.layers_backward_order()[0].clip_value.assign(
-            tf.convert_to_tensor(self.model.loss.get_L(), dtype=tf.float32)
-        )
-        return
-
-    def on_epoch_end(self, epoch, logs={}):
-        last_layer = self.model.layers_backward_order()[0]
-        assert isinstance(last_layer, DP_ClipGradient)
-        # print("Patience : ", epoch % last_layer.patience)
-        if last_layer.mode == "fixed":
-            raise TypeError(
-                "Fixed mode for last layer is incompatible with this callback"
-            )
-        if epoch % last_layer.patience == 0:
-            epsilon = last_layer.epsilon
-            list_norms = self.get_gradloss()
-            alpha, points, queries = diff_query(
-                list_norms, lower=0, upper=self.model.loss.get_L()
-            )
-            T = queries[0] * 0.1
-            updated_clip_value = points[
-                above_treshold(queries, sensitivity=alpha, T=T, epsilon=epsilon)
-            ]
-            print("updated_clip_value : ", updated_clip_value)
-            self.model.layers_backward_order()[0].clip_value.assign(updated_clip_value)
-            return
-
-    def get_gradloss(self):
-        batch = next(iter(self.ds_train.take(1)))
-        imgs, labels = batch
-        self.model.loss.reduction = tf.keras.losses.Reduction.NONE
-        predictions = self.model(imgs)
-        with tf.GradientTape() as tape:
-            tape.watch(predictions)
-            loss_value = self.model.compiled_loss(labels, predictions)
-        self.model.loss.reduction = tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
-        grad_loss = tape.gradient(loss_value, predictions)
-        norms = tf.norm(grad_loss, axis=-1)
-        return norms
 
 
 @dataclass
@@ -181,7 +36,7 @@ class DPParameters:
     """Parameters used to set the dp training.
 
     Attributes:
-        noisify_strategy (str): either 'local' or 'global'.
+        noisify_strategy (str): either "per-layer" or "global".
         noise_multiplier (float): noise multiplier.
         delta (float): delta parameter for DP.
     """
@@ -189,87 +44,6 @@ class DPParameters:
     noisify_strategy: str
     noise_multiplier: float
     delta: float
-
-
-class DPGD_Mechanism(Mechanism):
-    """DPGD Mechanism.
-
-    Args:
-        mode (str): kind of mechanism to use. Either 'global' or 'local'.
-        prob (float): probability of subsampling.
-        noise_multipliers (float, or list of floats): single scalar when mode == 'global', list of scalars when mode == 'local'.
-        num_grad_steps (int): number of gradient steps.
-        delta (float): delta parameter for DP.
-        dynamic_clipping (optional, dict): dictionary of parameters for dynamic clipping with keys:
-            epsilon (float): epsilon parameter for SVT algorithm.
-            num_updates (int): patience parameter for SVT algorithm.
-    """
-
-    def __init__(
-        self,
-        mode,
-        prob,
-        noise_multipliers,
-        num_grad_steps,
-        delta,
-        dynamic_clipping=None,
-        name="DPGD_Mechanism",
-    ):
-        # Init
-        Mechanism.__init__(self)
-        self.name = name
-        self.params = {
-            "prob": prob,
-            "noise_multipliers": noise_multipliers,
-            "num_grad_steps": num_grad_steps,
-            "delta": delta,
-            "dynamic_clipping": dynamic_clipping,
-        }
-
-        if mode == "global":
-            model_mech = mechanism_zoo.GaussianMechanism(sigma=noise_multipliers)
-        elif mode == "local":
-            layer_mechanisms = []
-
-            for sigma in noise_multipliers:
-                mech = mechanism_zoo.GaussianMechanism(sigma=sigma)
-                layer_mechanisms.append(mech)
-
-            # Accountant composition on layers
-            compose_gaussians = transformer_zoo.ComposeGaussian()
-            model_mech = compose_gaussians(
-                layer_mechanisms, [1] * len(noise_multipliers)
-            )
-        else:
-            raise ValueError("Unknown kind of mechanism")
-
-        subsample = transformer_zoo.AmplificationBySampling()
-        SubsampledModelGaussian_mech = subsample(
-            # improved_bound_flag can be set to True for Gaussian mechanisms (see autodp documentation).
-            model_mech,
-            prob,
-            improved_bound_flag=True,
-        )
-        compose = transformer_zoo.Composition()
-
-        if dynamic_clipping is None or dynamic_clipping["mode"] == "fixed":
-            global_mech = compose([SubsampledModelGaussian_mech], [num_grad_steps])
-        elif dynamic_clipping["mode"] == "dynamic_svt":
-            DynamicClippingMech = mechanism_zoo.PureDP_Mechanism(
-                eps=dynamic_clipping["epsilon"], name="SVT"
-            )
-            global_mech = compose(
-                [SubsampledModelGaussian_mech, DynamicClippingMech],
-                [num_grad_steps, dynamic_clipping["num_updates"]],
-            )
-
-        # Get relevant information
-        self.epsilon = global_mech.get_approxDP(delta=delta)
-        self.delta = delta
-
-        # Propagate updates
-        rdp_global = global_mech.RenyiDP
-        self.propagate_updates(rdp_global, type_of_update="RDP")
 
 
 class DP_Accountant(keras.callbacks.Callback):
@@ -304,8 +78,20 @@ class DP_Accountant(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         epsilon, delta = get_eps_delta(model=self.model, epochs=epoch + 1)
         print(f"\n {(epsilon,delta)}-DP guarantees for epoch {epoch+1} \n")
+
         # plot epoch at the same time as epsilon and delta to ease comparison of plots in wandb API.
-        self.log_fn({"epsilon": epsilon, "delta": delta, "epoch": epoch + 1})
+        to_log = {
+            "epsilon": epsilon,
+            "delta": delta,
+            "epoch": epoch + 1,
+        }
+
+        last_layer = self.model.layers_backward_order()[0]
+        if isinstance(last_layer, deel.lipdp.layers.DP_ClipGradient):
+            clipping_value = float(last_layer.clip_value.numpy())
+            to_log["clipping_value"] = clipping_value
+
+        self.log_fn(to_log)
 
 
 def get_eps_delta(model, epochs):
@@ -323,20 +109,20 @@ def get_eps_delta(model, epochs):
 
     prob = model.dataset_metadata.batch_size / model.dataset_metadata.nb_samples_train
 
+    # Dynamic clipping might be used.
     last_layer = model.layers_backward_order()[0]
-    dynamic_clipping = None
+    dynamic_clipping = {"mode": "fixed"}
     if isinstance(last_layer, deel.lipdp.layers.DP_ClipGradient):
-        dynamic_clipping = {}
-        dynamic_clipping["mode"] = last_layer.mode
-        dynamic_clipping["epsilon"] = last_layer.epsilon
-        dynamic_clipping["num_updates"] = epochs // last_layer.patience
+        dynamic_clipping.update(last_layer._dynamic_dp_dict)  # copy dict
+        if "patience" in dynamic_clipping:
+            dynamic_clipping["num_updates"] = epochs // dynamic_clipping["patience"]
 
-    if model.dp_parameters.noisify_strategy == "local":
+    if model.dp_parameters.noisify_strategy == "per-layer":
         nm_coefs = get_noise_multiplier_coefs(model)
         noise_multipliers = [
             model.dp_parameters.noise_multiplier * coef for coef in nm_coefs.values()
         ]
-        mode = "local"
+        mode = "per-layer"
     elif model.dp_parameters.noisify_strategy == "global":
         noise_multipliers = model.dp_parameters.noise_multiplier
         mode = "global"
@@ -443,11 +229,11 @@ def local_noisify(model, gradient_bounds, trainable_vars, gradients):
     noises = []
     for grad, var in zip(gradients, trainable_vars):
         if var.name in gradient_bounds.keys():
+            # no factor-2 : use add_remove definition of DP
             stddev = (
                 model.dp_parameters.noise_multiplier
                 * gradient_bounds[var.name]
                 * nm_coefs[var.name]
-                * 2
             )
             noises.append(tf.random.normal(shape=tf.shape(grad), stddev=stddev))
             if model.debug:
@@ -487,6 +273,7 @@ def global_noisify(model, gradient_bounds, trainable_vars, gradients):
     global_sensitivity = tf.math.sqrt(
         tf.math.reduce_sum([bound**2 for bound in gradient_bounds.values()])
     )
+    # no factor-2 : use add_remove definition of DP.
     stddev = model.dp_parameters.noise_multiplier * global_sensitivity
     noises = [tf.random.normal(shape=tf.shape(g), stddev=stddev) for g in gradients]
     if model.debug:
@@ -528,7 +315,7 @@ class DP_Sequential(deel.lip.model.Sequential):
             DP accounting is done with the associated Callback.
 
         Raises:
-            TypeError: when the dp_parameters.noisify_strategy is not one of "local" or "global"
+            TypeError: when the dp_parameters.noisify_strategy is not one of "per-layer" or "global"
         """
         super().__init__(*args, **kwargs)
         self.dp_parameters = dp_parameters
@@ -536,7 +323,7 @@ class DP_Sequential(deel.lip.model.Sequential):
         self.debug = debug
         if self.dp_parameters.noisify_strategy == "global":
             self.noisify_fun = global_noisify
-        elif self.dp_parameters.noisify_strategy == "local":
+        elif self.dp_parameters.noisify_strategy == "per-layer":
             self.noisify_fun = local_noisify
         else:
             raise TypeError(
@@ -605,7 +392,7 @@ class DP_Model(deel.lip.model.Model):
             DP accounting is done with the associated Callback.
 
         Raises:
-            TypeError: when the dp_parameters.noisify_strategy is not one of "local" or "global"
+            TypeError: when the dp_parameters.noisify_strategy is not one of "per-layer" or "global"
         """
         super().__init__(*args, **kwargs)
         self.dp_layers = dp_layers
@@ -614,7 +401,7 @@ class DP_Model(deel.lip.model.Model):
         self.debug = debug
         if self.dp_parameters.noisify_strategy == "global":
             self.noisify_fun = global_noisify
-        elif self.dp_parameters.noisify_strategy == "local":
+        elif self.dp_parameters.noisify_strategy == "per-layer":
             self.noisify_fun = local_noisify
         else:
             raise TypeError(
@@ -627,10 +414,10 @@ class DP_Model(deel.lip.model.Model):
     def layers_backward_order(self):
         return self.dp_layers[::-1]
 
-    def call(self, inputs, *args, **kwarsg):
+    def call(self, inputs, *args, **kwargs):
         x = inputs
         for layer in self.layers_forward_order():
-            x = layer(x, *args, **kwarsg)
+            x = layer(x, *args, **kwargs)
         return x
 
     # Define the differentially private training step

@@ -30,6 +30,7 @@ from deel.lipdp.layers import (
     DP_Flatten,
     DP_SpectralConv2D,
     DP_SpectralDense,
+    DP_QuickFrobeniusDense,
     DP_Reshape,
     DP_Lambda,
     DP_Permute,
@@ -52,15 +53,23 @@ from deel.lipdp.losses import (
     DP_MulticlassKR,
     DP_TauCategoricalCrossentropy,
 )
+from deel.lipdp.accounting import DPGD_Mechanism
+from deel.lipdp.dynamic import LaplaceAdaptiveLossGradientClipping
 from deel.lipdp.model import (
     DP_Model,
     DP_Sequential,
     DP_Accountant,
-    AdaptiveLossGradientClipping,
 )
-from deel.lipdp.pipeline import load_and_prepare_data, bound_clip_value, bound_normalize
+from deel.lipdp.pipeline import (
+    load_adbench_data,
+    prepare_tabular_data,
+    load_and_prepare_images_data,
+    bound_clip_value,
+    bound_normalize,
+)
 from deel.lipdp.sensitivity import (
     get_max_epochs,
     gradient_norm_check,
     check_layer_gradient_norm,
 )
+from deel.lipdp.utils import CertifiableAUROC, PrivacyMetrics, ScaledAUC
