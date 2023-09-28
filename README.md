@@ -50,9 +50,8 @@ Therefore the computation time is competitive with existing methods.
 
 We propose some tutorials to get familiar with the library and its api:
 
-- [Getting started](https://colab.research.google.com/drive/1XproaVxXjO9nrBSyyy7BuKJ1vy21iHs2) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/<libname>/blob/master/docs/notebooks/demo_fake.ipynb) </sub>
-
-You do not necessarily need to register the notebooks on the GitHub. Notebooks can be hosted on a specific [drive](https://drive.google.com/drive/folders/1DOI1CsL-m9jGjkWM1hyDZ1vKmSU1t-be).
+- [Demo on MNIST](https://colab.research.google.com/github/deel-ai/lipdp/blob/main/docs/notebooks/basic_mnist.ipynb) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/lipdp/blob/main/docs/notebooks/basic_mnist.ipynb) </sub>
+- [Demo on CIFAR10](https://colab.research.google.com/github/deel-ai/lipdp/blob/main/docs/notebooks/basic_mnist.ipynb) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/lipdp/blob/main/docs/notebooks/basic_mnist.ipynb) </sub>
 
 ## 🚀 Setup
 
@@ -60,12 +59,69 @@ lipDP requires some stuff and several libraries including Numpy. Installation ca
  done using Pypi:
 
 ```python
+pip install lipdp
+```
+
+or locally by cloning the repository and running:
+```python
 pip install -e .[dev]
 ```
 
 ### Setup privacy parameters
 
+Parameters are stored in a dataclass:
+
+```python
+from deel.lipdp.model import DPParameters
+dp_parameters = DPParameters(
+    noisify_strategy="local",
+    noise_multiplier=4.0,
+    delta=1e-5,
+)
+
+epsilon_max = 10.0
+```
+
 ### Setup DP model
+
+```python
+# construct DP_Sequential
+model = DP_Sequential(
+    # works like usual sequential but requires DP layers
+    layers=[
+        # BoundedInput works like Input, but performs input clipping to guarantee input bound
+        layers.DP_BoundedInput(
+            input_shape=dataset_metadata.input_shape, upper_bound=input_upper_bound
+        ),
+        layers.DP_QuickSpectralConv2D( # Reshaped Kernel Orthogonalization (RKO) convolution.
+            filters=32,
+            kernel_size=3,
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,  # No biases since the framework handles a single tf.Variable per layer.
+        ),
+        layers.DP_GroupSort(2),  # GNP activation function.
+        layers.DP_ScaledL2NormPooling2D(pool_size=2, strides=2),  # GNP pooling.
+        layers.DP_QuickSpectralConv2D( # Reshaped Kernel Orthogonalization (RKO) convolution.
+            filters=64,
+            kernel_size=3,
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,  # No biases since the framework handles a single tf.Variable per layer.
+        ),
+        layers.DP_GroupSort(2),  # GNP activation function.
+        layers.DP_ScaledL2NormPooling2D(pool_size=2, strides=2),  # GNP pooling.
+        
+        layers.DP_Flatten(),   # Convert features maps to flat vector.
+        
+        layers.DP_QuickSpectralDense(512),  # GNP layer with orthogonal weight matrix.
+        layers.DP_GroupSort(2),
+        layers.DP_QuickSpectralDense(dataset_metadata.nb_classes),
+    ],
+    dp_parameters=dp_parameters,
+    dataset_metadata=dataset_metadata,
+)
+```
 
 ### Setup accountant
 
@@ -90,43 +146,11 @@ Code can be found in the `lipdp` folder, the documentation ca be found by runnin
  `mkdocs build` and `mkdocs serve` (or loading `site/index.html`). Experiments were
   done using the code in the `experiments` folder.
 
-## 👍 Contributing
-
-Feel free to propose your ideas or come and contribute with us on the Libname toolbox! We have a specific document where we describe in a simple way how to make your first pull request: [just here](CONTRIBUTING.md).
-
-### pre-commit : Conventional Commits 1.0.0
-
-The commit message should be structured as follows:
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-
-```
-
-The commit contains the following structural elements, to communicate intent to the consumers of your library:
-
-- fix: a commit of the type fix patches a bug in your codebase (this correlates with PATCH in Semantic Versioning).
-
-- feat: a commit of the type feat introduces a new feature to the codebase (this correlates with MINOR in Semantic Versioning).
-
-- BREAKING CHANGE: a commit that has a footer BREAKING CHANGE:, or appends a ! after the type/scope, introduces a breaking API change (correlating with MAJOR in Semantic Versioning). A BREAKING CHANGE can be part of commits of any type.
-
-- types other than fix: and feat: are allowed, for example @commitlint/config-conventional (based on the the Angular convention) recommends *build:, chore:, ci:, docs:, style:, refactor:, perf:, test:*, and [others](https://delicious-insights.com/fr/articles/git-hooks-et-commitlint/).
-
 Other tools to perform DP-training include:
 
 - [tensorflow-privacy](https://github.com/tensorflow/privacy) in Tensorflow
 - [Opacus](https://opacus.ai/) in Pytorch
 - [jax-privacy](https://github.com/google-deepmind/jax_privacy) in Jax
- 
-- footers other than BREAKING CHANGE: <description> may be provided and follow a convention similar to git trailer format.
-
-- Additional types are not mandated by the Conventional Commits specification, and have no implicit effect in Semantic Versioning (unless they include a BREAKING CHANGE). A scope may be provided to a commit’s type, to provide additional contextual information and is contained within parenthesis, e.g., feat(parser): add ability to parse arrays.
-
 
 ## 🙏 Acknowledgments
 
@@ -143,7 +167,7 @@ If you use Libname as part of your workflow in a scientific publication, please 
 ```
 @article{bethune2023dp,
   title={DP-SGD Without Clipping: The Lipschitz Neural Network Way},
-  author={B{\'e}thune, Louis and Mass{\'e}na, Thomas and Boissin, Thibaut and Prudent, Yannick and Friedrich, Corentin and Mamalet, Franck and Bellet, Aurelien and Serrurier, Mathieu and Vigouroux, David},
+  author={Bethune, Louis and Massena, Thomas and Boissin, Thibaut and Prudent, Yannick and Friedrich, Corentin and Mamalet, Franck and Bellet, Aurelien and Serrurier, Mathieu and Vigouroux, David},
   journal={arXiv preprint arXiv:2305.16202},
   year={2023}
 }
