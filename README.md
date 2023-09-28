@@ -1,86 +1,37 @@
-# Purpose of this library :
+<!-- Banner section -->
+<div align="center">
+        <picture>
+                <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/banner_dark.png">
+                <source media="(prefers-color-scheme: light)" srcset="./docs/assets/banner_light.png">
+                <img alt="Library Banner" src="./docs/assets/banner_light.png">
+        </picture>
+</div>
+<br>
+
+<!-- Badge section -->
+<div align="center">
+    <a href="#">
+        <img src="https://img.shields.io/badge/Python-3.7, 3.8, 3.9-efefef">
+    </a>
+    <a href="#">
+        <img src="https://img.shields.io/badge/License-MIT-efefef">
+    </a>
+</div>
+<br>
+
+<!-- Short description of your library -->
+<p align="center">
+  <b>LipDP</b> is a Python toolkit dedicated to make people happy and fun.
+
 
 Conventionally, Differentially Private ML training relies on Gradient Clipping to guarantee verifiable privacy guarantees.
 By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based
 DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
 batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
 
-Therefore, the computation time is heavily reduced and the results on the MNIST and CIFAR10 datasets are the following :
+![backpropforbounds](./docs/assets/backprop_v2.png)
 
-
-# Status of the repository : 
-
-- ci tests to develop.
-- sensitivity.py to debug.
-- requirements.txt tested on my machine, still to check by someone else.
-
-# Deel library repository template
-
-Ce dépôt git sert de template pour les librairies DEEL ayant vocation à être rendues publiques sur github.
-Il donne la structure des répertoires d'un projet telle que celle adoptée par les librairies DEEL déjà publiques.
-
-A la racine du projet on trouve:
-
-- deel : répertoire destiné à recevoir le code de la librairie. C'est le premier mot de l'espaces de nommage de
-        la librairie. Ce n'est pas un module python, il ne contient donc pas de fichier __init__.py.
-        Il contient le module principal de la librairie du nom de cette librairie.
-        
-        Example: 
-        
-        librairie **deel-lip**:
-                    deel/deel-lip       
-
-- docs: répertoire destiné à la documentation de la librairie
-
-- tests: répertoire des tests unitaires
-
-- .pre-commit-config.yaml : configuration de outil de contrôle avant commit (pre-commit)
-
-- LICENCE/headers/MIT-Clause.txt : entête licence MIT injectée dans les fichiers du projet
-
-- CONTRIBUTING.md: description de la procédure pour apporter une contribution à la librairie.
-
-- GOUVERNANCE.md: description de la manière dont la librairie est gérée.
-
-- LICENCE : texte de la licence sous laquelle est publiée la librairie (MIT).
-
-- README.md 
-
-
-# pre-commit : Conventional Commits 1.0.0
-
-The commit message should be structured as follows:
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-
-```
-
-The commit contains the following structural elements, to communicate intent to the consumers of your library:
-
-- fix: a commit of the type fix patches a bug in your codebase (this correlates with PATCH in Semantic Versioning).
-
-- feat: a commit of the type feat introduces a new feature to the codebase (this correlates with MINOR in Semantic Versioning).
-
-- BREAKING CHANGE: a commit that has a footer BREAKING CHANGE:, or appends a ! after the type/scope, introduces a breaking API change (correlating with MAJOR in Semantic Versioning). A BREAKING CHANGE can be part of commits of any type.
-
-- types other than fix: and feat: are allowed, for example @commitlint/config-conventional (based on the the Angular convention) recommends *build:, chore:, ci:, docs:, style:, refactor:, perf:, test:*, and [others](https://delicious-insights.com/fr/articles/git-hooks-et-commitlint/).
- 
-- footers other than BREAKING CHANGE: <description> may be provided and follow a convention similar to git trailer format.
-
-- Additional types are not mandated by the Conventional Commits specification, and have no implicit effect in Semantic Versioning (unless they include a BREAKING CHANGE). A scope may be provided to a commit’s type, to provide additional contextual information and is contained within parenthesis, e.g., feat(parser): add ability to parse arrays.
-
-# README sections
-
-Conventionally, Differentially Private ML training relies on Gradient Clipping to guarantee verifiable privacy guarantees.
-By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based
-DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
-batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
-
+Therefore the computation time is competitive with existing methods.
 
 ## 📚 Table of contents
 
@@ -97,18 +48,41 @@ batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
 
 ## 🔥 Tutorials
 
+We propose some tutorials to get familiar with the library and its api:
 
+- [Getting started](https://colab.research.google.com/drive/1XproaVxXjO9nrBSyyy7BuKJ1vy21iHs2) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/<libname>/blob/master/docs/notebooks/demo_fake.ipynb) </sub>
 
-## 🚀 Quick Start
+You do not necessarily need to register the notebooks on the GitHub. Notebooks can be hosted on a specific [drive](https://drive.google.com/drive/folders/1DOI1CsL-m9jGjkWM1hyDZ1vKmSU1t-be).
 
-Libname requires some stuff and several libraries including Numpy. Installation can be done using Pypi:
+## 🚀 Setup
+
+lipDP requires some stuff and several libraries including Numpy. Installation can be
+ done using Pypi:
 
 ```python
-pip install dist/lipdp-0.0.1a0-py2.py3-none-any.whl[dev]
+pip install -e .[dev]
 ```
 
-Now that lipdp is installed, here are some basic examples of what you can do with the
- available modules.
+### Setup privacy parameters
+
+### Setup DP model
+
+### Setup accountant
+
+The privacy accountant is composed of different mechanisms from `autodp` package that are combined to provide a privacy accountant for Clipless DP-SGD algorithm:
+
+![rdpaccountant](./docs/assets/fig_accountant.png)
+
+
+Adding a privacy accountant to your model is straighforward:
+
+```python
+from deel.lipdp.model import DP_Accountant
+
+callbacks = [
+  DP_Accountant()
+]
+```
 
 ## 📦 What's Included
 
@@ -142,6 +116,12 @@ The commit contains the following structural elements, to communicate intent to 
 - BREAKING CHANGE: a commit that has a footer BREAKING CHANGE:, or appends a ! after the type/scope, introduces a breaking API change (correlating with MAJOR in Semantic Versioning). A BREAKING CHANGE can be part of commits of any type.
 
 - types other than fix: and feat: are allowed, for example @commitlint/config-conventional (based on the the Angular convention) recommends *build:, chore:, ci:, docs:, style:, refactor:, perf:, test:*, and [others](https://delicious-insights.com/fr/articles/git-hooks-et-commitlint/).
+
+Other tools to perform DP-training include:
+
+- [tensorflow-privacy](https://github.com/tensorflow/privacy) in Tensorflow
+- [Opacus](https://opacus.ai/) in Pytorch
+- [jax-privacy](https://github.com/google-deepmind/jax_privacy) in Jax
  
 - footers other than BREAKING CHANGE: <description> may be provided and follow a convention similar to git trailer format.
 
@@ -158,7 +138,16 @@ If you want to highlights the main contributors
 
 ## 🗞️ Citation
 
+If you use Libname as part of your workflow in a scientific publication, please consider citing the 🗞️ [our paper](https://arxiv.org/abs/2305.16202):
 
+```
+@article{bethune2023dp,
+  title={DP-SGD Without Clipping: The Lipschitz Neural Network Way},
+  author={B{\'e}thune, Louis and Mass{\'e}na, Thomas and Boissin, Thibaut and Prudent, Yannick and Friedrich, Corentin and Mamalet, Franck and Bellet, Aurelien and Serrurier, Mathieu and Vigouroux, David},
+  journal={arXiv preprint arXiv:2305.16202},
+  year={2023}
+}
+```
 
 ## 📝 License
 

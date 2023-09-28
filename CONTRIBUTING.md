@@ -10,7 +10,7 @@ work is not in vain.
 
 ## Setup with make
 
-- Clone the repo `git clone https://github.com/deel-ai/dp-lipschitz.git`.
+- Clone the repo `git clone https://github.com/deel-ai/lipdp.git`.
 - Go to your freshly downloaded repo `cd lipdp`
 - Create a virtual environment and install the necessary dependencies for development:
 
@@ -51,3 +51,4 @@ Something that will increase the chance that your pull request is accepted:
 - Follow the existing coding style and run `make check_all` to check all files format.
 - Write a [good commit message](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html) (we follow a lowercase convention).
 - For a major fix/feature make sure your PR has an issue and if it doesn't, please create one. This would help discussion with the community, and polishing ideas in case of a new feature.
+
