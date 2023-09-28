@@ -42,7 +42,12 @@ def init_wandb(cfg: ConfigDict, project: str):
             cfg[key] = value
 
 
-def run_with_wandb(cfg: ConfigDict, train_function: Callable, project: str):
+def run_with_wandb(
+    cfg: ConfigDict,
+    train_function: Callable,
+    project: str,
+    allow_defaults: bool = False,
+):
     """Run an individual run or a sweep."""
     wandb.login()
     # indivudal run
@@ -57,11 +62,20 @@ def run_with_wandb(cfg: ConfigDict, train_function: Callable, project: str):
                 sweep_config = _get_sweep_config_from_yaml(cfg)
             else:
                 # default sweep config
+                assert (
+                    allow_defaults
+                ), "No sweep config specified and allow_defaults is False"
+                print("No sweep config specified, using default config.")
                 sweep_config = _get_default_sweep_config(cfg)
             sweep_id = wandb.sweep(sweep=sweep_config, project=project)
         else:
+            assert (
+                cfg.sweep_yaml_config == ""
+            ), "Cannot specify both sweep_id and sweep_yaml_config"
             sweep_id = cfg.sweep_id
-        count = cfg.sweep_count if "sweep_count" in cfg else None
+        count = (
+            cfg.sweep_count if ("sweep_count" in cfg and cfg.sweep_count > 0) else None
+        )
         wandb.agent(sweep_id, function=train_function, project=project, count=count)
 
 

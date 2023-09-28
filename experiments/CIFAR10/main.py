@@ -59,7 +59,7 @@ def default_cfg_cifar10():
     cfg.learning_rate = 8e-2  # works well for vanilla SGD.
     cfg.log_wandb = "disabled"
     cfg.loss = "TauCategoricalCrossentropy"
-    cfg.mia = False
+    cfg.mia = True
     cfg.multiplicity = 4
     cfg.noise_multiplier = 3.0
     cfg.noisify_strategy = "per-layer"
@@ -319,7 +319,7 @@ def train():
         optimizer=optimizer,
         metrics=[
             "accuracy",
-            *certifiable_acc_metrics([1, 2, 4, 8, 16]),
+            *certifiable_acc_metrics([1, 2, 4, 8, 16, 36]),
         ],  # accuracy metric is necessary for dynamic loss gradient clipping with "laplace"
         run_eagerly=False,
     )

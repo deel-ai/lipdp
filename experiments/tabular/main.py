@@ -40,6 +40,7 @@ from deel.lipdp.pipeline import default_delta_value
 from deel.lipdp.pipeline import load_adbench_data
 from deel.lipdp.pipeline import prepare_tabular_data
 from deel.lipdp.sensitivity import get_max_epochs
+from deel.lipdp.utils import ScaledAUC
 from experiments.wandb_utils import init_wandb
 from experiments.wandb_utils import run_with_wandb
 from wandb.keras import WandbCallback
@@ -50,7 +51,7 @@ def default_cfg_cifar10():
     cfg.batch_size = 200
     cfg.clip_loss_gradient = None  # not required for dynamic clipping.
     cfg.depth = 2
-    cfg.dataset_name = "11_donors"
+    cfg.dataset_name = "1_ALOI"
     cfg.dynamic_clipping = "quantiles"  # can be "fixed", "laplace", "quantiles". "fixed" requires a clipping value.
     cfg.dynamic_clipping_quantiles = 0.9
     cfg.delta = 1e-5
@@ -59,7 +60,7 @@ def default_cfg_cifar10():
     cfg.learning_rate = 8e-2  # works well for vanilla SGD.
     cfg.log_wandb = "disabled"
     cfg.loss = "TauBCE"
-    cfg.multiplicity = 4
+    cfg.multiplicity = 0
     cfg.noise_multiplier = 1.6
     cfg.noisify_strategy = "per-layer"
     cfg.optimizer = "SGD"
@@ -131,6 +132,9 @@ def train():
         cfg.dataset_name, dataset_dir="/data/datasets/adbench", standardize=True
     )
 
+    print(f"x_data.shape = {x_data.shape}")
+    print(f"y_data.shape = {y_data.shape} with labels {np.unique(y_data)}")
+
     # clipping preprocessing allows to control input bound
     input_bound = cfg.input_bound
     if input_bound is None:
@@ -139,12 +143,14 @@ def train():
     bound_fct = bound_clip_value(input_bound)
 
     random_state = random.randint(0, 1000)
-    splits = train_test_split(x_data, y_data, test_size=0.2, random_state=random_state)
+    splits = train_test_split(
+        x_data, y_data, test_size=0.2, random_state=random_state, stratify=y_data
+    )
 
     ds_train, ds_test, dataset_metadata = prepare_tabular_data(
         *splits,
         batch_size=cfg.batch_size,
-        drop_remainder=True,  # accounting assumes fixed batch size
+        drop_remainder=True,  # required for correct sensitivity computation.
         bound_fct=bound_fct,
     )
 
@@ -190,7 +196,7 @@ def train():
         optimizer=optimizer,
         metrics=[
             "accuracy",
-            tf.keras.metrics.AUC(from_logits=True),
+            ScaledAUC(scale=cfg.tau),
         ],  # accuracy metric is necessary for dynamic loss gradient clipping with "laplace"
         run_eagerly=False,
     )
@@ -225,7 +231,7 @@ def train():
         num_epochs = 50  # useful for debugging.
     else:
         # compute the max number of epochs to reach the budget.
-        num_epochs = get_max_epochs(cfg.epsilon_max, model, safe=False)
+        num_epochs = get_max_epochs(cfg.epsilon_max, model, safe=True)
 
     hist = model.fit(
         ds_train,

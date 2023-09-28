@@ -1,0 +1,21 @@
+method: bayes
+metric:
+  name: val_accuracy
+  goal: maximize 
+parameters:
+  MAX_GRAD_NORM:
+    min: 0.01
+    max: 100
+    distribution: log_uniform_values
+  LR:
+    min: 0.00001
+    max: 1.0
+    distribution: log_uniform_values
+  BATCH_SIZE:
+    values: [500, 1000, 2000]
+    distribution: categorical
+  EPOCHS:
+    min: 1
+    max: 400
+    distribution: q_log_uniform_values
+    

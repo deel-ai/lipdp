@@ -1,6 +1,6 @@
 method: bayes
 metric:
-  name: val_certacc_2
+  name: val_certacc_16
   goal: maximize
 parameters:
   noise_multiplier:
@@ -19,7 +19,7 @@ parameters:
     max: 4.5
     distribution: uniform
   tau:
-    min: 0.1
+    min: 0.01
     max: 100.0
     distribution: log_uniform_values
   epsilon_max:

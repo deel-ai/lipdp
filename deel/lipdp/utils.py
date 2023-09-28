@@ -23,6 +23,19 @@
 import tensorflow as tf
 
 
+class ScaledAUC(tf.keras.metrics.AUC):
+    def __init__(self, scale, name="auc", **kwargs):
+        if "from_logits" in kwargs and kwargs["from_logits"] is False:
+            raise ValueError("ScaledAUC must be used with from_logits=True")
+        kwargs["from_logits"] = True
+        super().__init__(name=name, **kwargs)
+        self.scale = scale
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_pred = y_pred * self.scale
+        return super().update_state(y_true, y_pred, sample_weight=sample_weight)
+
+
 class CertifiableAUROC(tf.keras.metrics.AUC):
     def __init__(self, radius, **kwargs):
         super().__init__(**kwargs)

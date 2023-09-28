@@ -72,4 +72,4 @@ from deel.lipdp.sensitivity import (
     gradient_norm_check,
     check_layer_gradient_norm,
 )
-from deel.lipdp.utils import CertifiableAUROC, PrivacyMetrics
+from deel.lipdp.utils import CertifiableAUROC, PrivacyMetrics, ScaledAUC
