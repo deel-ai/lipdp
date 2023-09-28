@@ -44,10 +44,10 @@ if os.path.exists(req_dev_path):
 readme_path = os.path.join(this_directory, "README.md")
 readme_contents = ""
 if os.path.exists(readme_path):
-    with open(readme_path) as fp:
+    with open(readme_path, encoding="utf8") as fp:
         readme_contents = fp.read().strip()
 
-with open(os.path.join(this_directory, "deel/lipdp/VERSION")) as f:
+with open(os.path.join(this_directory, "deel/lipdp/VERSION"), encoding="utf8") as f:
     version = f.read().strip()
 
 setup(
@@ -57,7 +57,9 @@ setup(
     version=version,
     # Find the package automatically (include everything):
     packages=find_namespace_packages(include=["deel.*"]),
-    package_data={},
+    package_data={'': ['VERSION']},
+    include_package_data=True,
+    # Author information:
     # Author information:
     author="",
     author_email="",
