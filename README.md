@@ -14,14 +14,13 @@
   <b>LipDP</b> is a Python toolkit dedicated to make people happy and fun.
 
 
-Conventionally, Differentially Private ML training relies on Gradient Clipping to guarantee verifiable privacy guarantees.
-By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based
-DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
-batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
+State-of-the-art approaches for training Differentially Private (DP) Deep Neural Networks (DNN) face difficulties to estimate tight bounds on the sensitivity of the network's layers, and instead rely on a process of per-sample gradient clipping. This clipping process not only biases the direction of gradients but also proves costly both in memory consumption and in computation. To provide sensitivity bounds and bypass the drawbacks of the clipping process, we propose to rely on Lipschitz constrained networks. Our theoretical analysis reveals an unexplored link between the Lipschitz constant with respect to their input and the one with respect to their parameters. By bounding the Lipschitz constant of each layer with respect to its parameters, we prove that we can train these networks with privacy guarantees.  Our analysis not only allows the computation of the aforementioned sensitivities at scale, but also provides guidance on how to maximize the gradient-to-noise ratio for fixed privacy guarantees. To facilitate the application of Lipschitz networks and foster robust and certifiable learning under privacy guarantees, we provide this Python package that implements building blocks allowing the construction and private training of such networks.
 
 ![backpropforbounds](./docs/assets/backprop_v2.png)
 
-Therefore the computation time is competitive with existing methods.
+The sensitivity is computed automatically by the package, and no element-wise clipping is required. This is translated into a new DP-SGD algorithm, called Clipless DP-SGD, that is faster and more memory efficient than DP-SGD with clipping.
+
+![speed](./docs/assets/all_speed_curves.png)
 
 ## 📚 Table of contents
 
