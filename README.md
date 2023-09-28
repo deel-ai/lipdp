@@ -147,21 +147,9 @@ Other tools to perform DP-training include:
 
 ## 👨‍🎓 Creators
 
-If you want to highlights the main contributors
-
 
 ## 🗞️ Citation
 
-If you use Libname as part of your workflow in a scientific publication, please consider citing the 🗞️ [our paper](https://arxiv.org/abs/2305.16202):
-
-```
-@article{bethune2023dp,
-  title={DP-SGD Without Clipping: The Lipschitz Neural Network Way},
-  author={Bethune, Louis and Massena, Thomas and Boissin, Thibaut and Prudent, Yannick and Friedrich, Corentin and Mamalet, Franck and Bellet, Aurelien and Serrurier, Mathieu and Vigouroux, David},
-  journal={arXiv preprint arXiv:2305.16202},
-  year={2023}
-}
-```
 
 ## 📝 License
 
