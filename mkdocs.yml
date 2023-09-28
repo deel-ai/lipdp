@@ -9,8 +9,9 @@ nav:
       - deel.lipdp.model module: api/model.md
       - deel.lipdp.pipeline module: api/pipeline.md
       - deel.lipdp.sensitivity module: api/sensitivity.md
-#  - Tutorials:
-#    - "Demo 0: How to use notebook in documentation": notebooks/demo_fake.ipynb
+  - Tutorials:
+    - "Demo 1: basic use on MNIST": notebooks/basic_mnist.ipynb
+    - "Demo 2: advanced use on CIFAR10": notebooks/advanced_cifar10.ipynb
   - Contributing: CONTRIBUTING.md
 
 theme:
