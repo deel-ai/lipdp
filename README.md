@@ -1,13 +1,3 @@
-<!-- Banner section -->
-<div align="center">
-        <picture>
-                <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/banner_dark.png">
-                <source media="(prefers-color-scheme: light)" srcset="./docs/assets/banner_light.png">
-                <img alt="Library Banner" src="./docs/assets/banner_light.png">
-        </picture>
-</div>
-<br>
-
 <!-- Badge section -->
 <div align="center">
     <a href="#">

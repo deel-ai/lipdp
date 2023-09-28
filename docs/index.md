@@ -6,13 +6,6 @@ Mainly you could copy the README.md here. However, you should be careful with:
 - Link to assets (handling dark mode is different between GitHub and the documentation)
 - Relative links
 
-<!-- Banner section -->
-<div align="center">
-    <img src="./assets/banner_dark.png#only-dark" width="75%" alt="lib banner" align="center" />
-    <img src="./assets/banner_light.png#only-light" width="75%" alt="lib banner" align="center" />
-</div>
-<br>
-
 <!-- Badge section -->
 <div align="center">
     <a href="#">
