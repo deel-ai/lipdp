@@ -28,7 +28,7 @@ import tensorflow as tf
 from deel.lipdp.model import get_eps_delta
 
 
-def get_max_epochs(epsilon_max, model, epochs_max=1024):
+def get_max_epochs(epsilon_max, model, epochs_max=1024, safe=True):
     """Return the maximum number of epochs to reach a given epsilon_max value.
 
     The computation of (epsilon, delta) is slow since it involves solving a minimization problem
@@ -45,16 +45,18 @@ def get_max_epochs(epsilon_max, model, epochs_max=1024):
         model: The model used to compute the values of epsilon.
         epochs_max: The maximum number of epochs to reach epsilon_max. Defaults to 1024.
                     If None, the dichotomy search is used to find the upper bound.
+        safe: If True, the dichotomy search returns the largest number of epochs such that epsilon <= epsilon_max.
+              Otherwise, it returns the smallest number of epochs such that epsilon >= epsilon_max.
 
     Returns:
-        The maximum number of epochs to reach epsilon_max."""
+        The maximum number of epochs to reach epsilon_max. It may be zero if epsilon_max is too small.
+    """
     steps_per_epoch = model.dataset_metadata.nb_steps_per_epochs
 
     def fun(epoch):
         if epoch == 0:
             epsilon = 0
         else:
-            epoch = round(epoch)
             niter = (epoch + 1) * steps_per_epoch
             epsilon, _ = get_eps_delta(model, epoch)
         return epsilon
@@ -71,7 +73,7 @@ def get_max_epochs(epsilon_max, model, epochs_max=1024):
     epochs_min = 0
 
     while epochs_max - epochs_min > 1:
-        epoch = (epochs_max + epochs_min) / 2
+        epoch = (epochs_max + epochs_min) // 2
         epsilon = fun(epoch)
         if epsilon < epsilon_max:
             epochs_min = epoch
@@ -81,7 +83,7 @@ def get_max_epochs(epsilon_max, model, epochs_max=1024):
             f"epoch bounds = {epochs_min, epochs_max} and epsilon = {epsilon} at epoch {epoch}"
         )
 
-    return int(round(epoch))
+    return epochs_min if safe else epochs_max
 
 
 def gradient_norm_check(K_list, model, examples):

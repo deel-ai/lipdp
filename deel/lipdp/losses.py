@@ -31,13 +31,13 @@ from deel.lip.losses import MulticlassKR
 from deel.lip.losses import TauCategoricalCrossentropy
 
 
-class DP_Loss(Loss):
+class DP_Loss:
     def get_L(self):
-        """returns the lipschitz constant of the loss"""
+        """Lipschitz constant of the loss wrt the logits."""
         raise NotImplementedError()
 
 
-class DP_KCosineSimilarity(DP_Loss):
+class DP_KCosineSimilarity(Loss, DP_Loss):
     def __init__(
         self,
         K=1.0,
@@ -58,7 +58,7 @@ class DP_KCosineSimilarity(DP_Loss):
         return -tf.reduce_sum(y_true * y_pred, axis=self.axis)
 
     def get_L(self):
-        """returns the lipschitz constant of the loss"""
+        """Lipschitz constant of the loss wrt the logits."""
         return 1 / float(self.K)
 
 
@@ -83,9 +83,38 @@ class DP_TauCategoricalCrossentropy(TauCategoricalCrossentropy, DP_Loss):
         )
 
     def get_L(self):
-        """returns the lipschitz constant of the loss"""
+        """Lipschitz constant of the loss wrt the logits."""
         # as the implementation divide the loss by self.tau (and as it is used with "from_logit=True")
         return math.sqrt(2)
+
+
+class DP_TauBCE(tf.keras.losses.BinaryCrossentropy, DP_Loss):
+    def __init__(
+        self,
+        tau,
+        reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
+        name="TauBCE",
+    ):
+        """
+        Similar to original binary crossentropy, but with a settable temperature
+        parameter.
+
+        Args:
+            tau (float): temperature parameter.
+            reduction: reduction of the loss, must be SUM_OVER_BATCH_SIZE in order have a correct accounting.
+            name (str): name of the loss
+        """
+        super().__init__(from_logits=True, reduction=reduction, name=name)
+        self.tau = tau
+
+    def call(self, y_true, y_pred):
+        y_pred = y_pred * self.tau
+        return super().call(y_true, y_pred) / self.tau
+
+    def get_L(self):
+        """Lipschitz constant of the loss wrt the logits."""
+        # as the implementation divide the loss by self.tau (and as it is used with "from_logit=True")
+        return 1.0
 
 
 class DP_MulticlassHKR(MulticlassHKR, DP_Loss):
@@ -124,7 +153,7 @@ class DP_MulticlassHKR(MulticlassHKR, DP_Loss):
         )
 
     def get_L(self):
-        """returns the lipschitz constant of the loss"""
+        """Lipschitz constant of the loss wrt the logits."""
         return self.alpha + 1.0
 
 
@@ -156,7 +185,7 @@ class DP_MulticlassHinge(MulticlassHinge, DP_Loss):
         )
 
     def get_L(self):
-        """returns the lipschitz constant of the loss"""
+        """Lipschitz constant of the loss wrt the logits."""
         return 1.0
 
 
@@ -187,7 +216,7 @@ class DP_MulticlassKR(MulticlassKR, DP_Loss):
         super(DP_MulticlassKR, self).__init__(reduction=reduction, name=name)
 
     def get_L(self):
-        """returns the lipschitz constant of the loss"""
+        """Lipschitz constant of the loss wrt the logits."""
         return 1.0
 
 
@@ -203,5 +232,5 @@ class DP_MeanAbsoluteError(tf.keras.losses.MeanAbsoluteError, DP_Loss):
         super(DP_MeanAbsoluteError, self).__init__(reduction=reduction, name=name)
 
     def get_L(self):
-        """returns the lipschitz constant of the loss"""
+        """Lipschitz constant of the loss wrt the logits."""
         return 1.0

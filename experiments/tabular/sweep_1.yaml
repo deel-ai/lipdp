@@ -1,0 +1,29 @@
+method: bayes
+metric:
+  name: val_auc
+  goal: maximize
+parameters:
+  noise_multiplier:
+    min: 0.8
+    max: 6.0
+    distribution: uniform
+  learning_rate:
+    min: 0.00001
+    max: 1.0
+    distribution: log_uniform_values
+  batch_size:
+    values: [2000, 5000, 10000]
+    distribution: categorical
+  tau:
+    min: 0.01
+    max: 100.0
+    distribution: log_uniform_values
+  epsilon_max:
+    value: 1.
+    distribution: constant
+  width_multiplier:
+    values: [1, 2, 3]
+    distribution: categorical
+  depth:
+    values: [1, 2]
+    distribution: categorical
