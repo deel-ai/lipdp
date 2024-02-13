@@ -77,6 +77,8 @@ def run_with_wandb(
             cfg.sweep_count if ("sweep_count" in cfg and cfg.sweep_count > 0) else None
         )
         wandb.agent(sweep_id, function=train_function, project=project, count=count)
+    else:
+        raise ValueError(f"Unknown log_wandb value {cfg.log_wandb}")
 
 
 def _sanitize_sweep_config_from_cfg(sweep_config: dict, cfg: ConfigDict) -> dict:

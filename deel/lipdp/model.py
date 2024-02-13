@@ -22,6 +22,7 @@
 # SOFTWARE.
 from dataclasses import dataclass
 
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
@@ -420,8 +421,108 @@ class DP_Model(deel.lip.model.Model):
             x = layer(x, *args, **kwargs)
         return x
 
+    def signal_to_noise_elementwise(self, data):
+        """Compute the signal to noise ratio of the model.
+
+        Args:
+            data: a tuple (x,y) of a batch of data.
+
+        Returns:
+            ratios: dictionary of signal to noise ratios. Keys are trainable variables names.
+            norms: dictionary of gradient norms. Keys are trainable variables names.
+            bounds: dictionary of gradient norm bounds. Keys are trainable variables names.
+        """
+        import tqdm
+
+        examples, labels = data
+
+        trainable_vars = self.trainable_variables
+        names = [v.name for v in trainable_vars]
+
+        bounds = compute_gradient_bounds(model=self)
+        batch_size = self.dataset_metadata.batch_size
+        bounds = {name: bound * batch_size for name, bound in bounds.items()}
+
+        norms = {name: [] for name in names}
+        ratios = {name: [] for name in names}
+        total = len(examples)
+        for x, y in tqdm.tqdm(zip(examples, labels), total=total):
+            with tf.GradientTape() as tape:
+                x = tf.expand_dims(x, axis=0)
+                y = tf.expand_dims(y, axis=0)
+                y_pred = self(x, training=True)
+                loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+
+            gradient_element = tape.gradient(loss, self.trainable_variables)
+            norms_element = [tf.linalg.norm(g, axis=None) for g in gradient_element]
+            norms_element = {name: norm for name, norm in zip(names, norms_element)}
+            for name in names:
+                norms[name].append(norms_element[name].numpy())
+
+            ratios_element = {}
+            for name in names:
+                ratios_element[name] = norms_element[name] / bounds[name]
+            for name in names:
+                ratios[name].append(ratios_element[name])
+
+        ratios = {name: np.stack(ratios[name]) for name in names}
+        norms = {name: np.stack(norms[name]) for name in names}
+
+        return ratios, norms, bounds
+
+    def signal_to_noise_average(self, data):
+        """Compute the signal to noise ratio of the model.
+
+        Args:
+            data: a tuple (x,y) of a batch of data. The batch size must be equal to the one of the dataset.
+
+        Returns:
+            ratios: dictionary of signal to noise ratios. Keys are trainable variables names.
+            norms: dictionary of gradient norms. Keys are trainable variables names.
+            bounds: dictionary of gradient norm bounds. Keys are trainable variables names.
+        """
+        x, y = data
+
+        assert (
+            x.shape[0] == self.dataset_metadata.batch_size
+        ), "Batch size must be equal to the one of the dataset"
+
+        with tf.GradientTape() as tape:
+            y_pred = self(x, training=True)  # Forward pass
+            # tf.cast(y_pred,dtype=y.dtype)
+            # Compute the loss value
+            # (the loss function is configured in `compile()`)
+            loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+
+        # Compute gradients
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+
+        # gradient norms
+        norms = [tf.linalg.norm(g, axis=None) for g in gradients]
+        names = [v.name for v in trainable_vars]
+        norms = {name: norm for name, norm in zip(names, norms)}
+
+        # Get gradient bounds
+        bounds = compute_gradient_bounds(model=self)
+        batch_size = self.dataset_metadata.batch_size
+        bounds = {name: (bound * batch_size) for name, bound in bounds.items()}
+
+        ratios = {}
+        for name in names:
+            ratios[name] = norms[name] / bounds[name]
+        return ratios, norms, bounds
+
     # Define the differentially private training step
     def train_step(self, data):
+        """Train step of the model with DP guarantees.
+
+        Args:
+            data: a tuple (x,y) of a batch of data.
+
+        Returns:
+            metrics: dictionary of metrics.
+        """
         # Unpack data
         x, y = data
 
@@ -440,11 +541,12 @@ class DP_Model(deel.lip.model.Model):
         noisy_gradients = self.noisify_fun(
             self, gradient_bounds, trainable_vars, gradients
         )
-        # Each optimizer is a postprocessing of the already (epsilon,delta)-DP gradients
+        # Each optimizer is a postprocessing of private gradients
         self.optimizer.apply_gradients(zip(noisy_gradients, trainable_vars))
-        # self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+
         # Update Metrics
         self.compiled_metrics.update_state(y, y_pred)
-        # Condense to verify |W|_2 = 1
+
+        # Condense to ensure Lipschitz constraints |W|_2 = 1
         self.condense()
         return {m.name: m.result() for m in self.metrics}

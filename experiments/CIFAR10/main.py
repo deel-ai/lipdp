@@ -39,6 +39,8 @@ from deel.lipdp.pipeline import default_delta_value
 from deel.lipdp.pipeline import load_and_prepare_images_data
 from deel.lipdp.sensitivity import get_max_epochs
 from deel.lipdp.utils import PrivacyMetrics
+from deel.lipdp.utils import SignaltoNoiseAverage
+from deel.lipdp.utils import SignaltoNoiseHistogram
 from experiments.wandb_utils import init_wandb
 from experiments.wandb_utils import run_with_wandb
 from wandb.keras import WandbCallback
@@ -54,17 +56,18 @@ def default_cfg_cifar10():
         0.9  # crop to 90% of the distribution of gradient norm.
     )
     cfg.delta = 1e-5  # 1e-5 is the default value in the paper.
-    cfg.epsilon_max = None  # budget!
+    cfg.epsilon_max = 8.0  # budget!
     cfg.input_bound = 3.0  # 15.0 works well in RGB non standardized.
     cfg.learning_rate = 8e-2  # works well for vanilla SGD.
     cfg.log_wandb = "disabled"
     cfg.loss = "TauCategoricalCrossentropy"
-    cfg.mia = True
-    cfg.multiplicity = 4
+    cfg.mia = False
+    cfg.multiplicity = 0  # 0 means no multiplicity.
     cfg.noise_multiplier = 3.0
     cfg.noisify_strategy = "per-layer"
     cfg.representation = "RGB_STANDARDIZED"  # "RGB", "RGB_STANDARDIZED", "HSV".
     cfg.optimizer = "SGD"
+    cfg.signal_to_noise = "histogram"
     cfg.sweep_id = ""  # useful to resume a sweep.
     cfg.sweep_yaml_config = ""  # useful to load a sweep from a yaml file.
     cfg.tau = 20.0  # temperature for the softmax.
@@ -233,7 +236,7 @@ def certifiable_acc_metrics(epsilons):
         epsilon = epsilon_8bit / 255.0
         # dataset has been standardized so we take that into account:
         if cfg.representation == "RGB_STANDARDIZED":
-            epsilon = epsilon / 0.2023
+            epsilon = epsilon / 0.2023  # maximum std dev: lower bound of radius.
         else:
             assert (
                 cfg.representation == "RGB"
@@ -328,6 +331,17 @@ def train():
         WandbCallback(save_model=False, monitor="val_accuracy"),
         DP_Accountant(),
     ]
+
+    if cfg.signal_to_noise == "disabled":
+        pass
+    elif cfg.signal_to_noise == "average":
+        batch_train = next(iter(ds_train))
+        callbacks.append(SignaltoNoiseAverage(batch_train))
+    elif cfg.signal_to_noise == "histogram":
+        batch_train = next(iter(ds_train))
+        callbacks.append(SignaltoNoiseHistogram(batch_train))
+    else:
+        raise ValueError(f"Unknown signal_to_noise {cfg.signal_to_noise}")
 
     ########################
     ### Dynamic clipping ###

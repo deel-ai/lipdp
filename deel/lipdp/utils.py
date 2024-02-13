@@ -20,6 +20,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import numpy as np
 import tensorflow as tf
 
 
@@ -142,3 +143,91 @@ class PrivacyMetrics(tf.keras.callbacks.Callback):
             "mia_adv_entire_dataset": max_adv_entire_dataset,
         }
         self.log_fn(to_log)
+
+
+class SignaltoNoiseAverage(tf.keras.callbacks.Callback):
+    def __init__(self, batch, log_fn="all"):
+        super().__init__()
+        if log_fn == "wandb":
+            import wandb
+
+            log_fn = wandb.log
+        elif log_fn == "logging":
+            import logging
+
+            log_fn = logging.info
+        elif log_fn == "all":
+            import wandb
+            import logging
+
+            log_fn = lambda x: [wandb.log(x), logging.info(x)]
+        else:
+            raise ValueError(f"Unknown log_fn {log_fn}")
+        self.log_fn = log_fn
+
+        self.batch = batch
+
+    def on_epoch_end(self, epoch, logs=None):
+        ratios, norms, gradient_bounds = self.model.signal_to_noise_average(self.batch)
+
+        norms = {("norms_" + k): v.numpy() for k, v in norms.items()}
+        gradient_bounds = {
+            ("gradient_bounds_" + k): v.numpy() for k, v in gradient_bounds.items()
+        }
+        ratios = {("ratios_" + k): v.numpy() for k, v in ratios.items()}
+
+        norms_avg = np.mean(list(norms.values()))
+        gradient_bounds_avg = np.mean(list(gradient_bounds.values()))
+        ratio_avg = np.mean(list(ratios.values()))
+
+        to_log = {
+            "epoch": epoch,
+            "norms_avg": norms_avg,
+            "gradient_bounds_avg": gradient_bounds_avg,
+            "ratio_avg": ratio_avg,
+            **norms,
+            **gradient_bounds,
+            **ratios,
+        }
+
+        self.log_fn(to_log)
+
+
+class SignaltoNoiseHistogram(tf.keras.callbacks.Callback):
+    def __init__(self, batch):
+        super().__init__()
+
+        try:
+            import wandb
+
+            self.wandb = wandb
+        except ImportError:
+            raise ImportError(
+                "wandb is not installed. Please install it to use SignaltoNoiseHistogram."
+            )
+
+        self.batch = batch
+
+    def on_epoch_end(self, epoch, logs=None):
+        ratios, norms, gradient_bounds = self.model.signal_to_noise_elementwise(
+            self.batch
+        )
+
+        norms = {("norms_" + k): v for k, v in norms.items()}
+        gradient_bounds = {
+            ("gradient_bounds_" + k): v for k, v in gradient_bounds.items()
+        }
+        ratios = {("ratios_" + k): v for k, v in ratios.items()}
+
+        norms_histograms = {k: self.wandb.Histogram(v) for k, v in norms.items()}
+        gradient_bounds_histograms = {k: v for k, v in gradient_bounds.items()}
+        ratios_histograms = {k: self.wandb.Histogram(v) for k, v in ratios.items()}
+
+        self.wandb.log(
+            {
+                "epoch": epoch,
+                **norms_histograms,
+                **gradient_bounds_histograms,
+                **ratios_histograms,
+            }
+        )
