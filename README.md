@@ -41,21 +41,14 @@ The sensitivity is computed automatically by the package, and no element-wise cl
 
 ## 🔥 Tutorials
 
-We propose some tutorials to get familiar with the library and its api:
+We propose some tutorials to get familiar with the library and its API:
 
-- [Demo on MNIST](https://colab.research.google.com/github/Algue-Rythme/lip-dp/blob/main/docs/notebooks/basic_mnist.ipynb) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Algue-Rythme/lip-dp/blob/main/docs/notebooks/basic_mnist.ipynb) </sub>
-- [Demo on CIFAR10](https://colab.research.google.com/github/Algue-Rythme/lip-dp/blob/main/docs/notebooks/advanced_cifar10.ipynb) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Algue-Rythme/lip-dp/blob/main/docs/notebooks/advanced_cifar10.ipynb) </sub>
+- **Demo on MNIST** <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1s3LBIxf0x1sOMQUw6BHpxbeUzmwtaP0d) </sub>
+- **Demo on CIFAR10** <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1RbALHN-Eib6CCUznLrbiETX7JJrFaUB0) </sub>
 
 ## 🚀 Quick Start
 
-lipDP requires some stuff and several libraries including Numpy. Installation can be
- done using Pypi:
-
-```python
-pip install lipdp
-```
-
-or locally by cloning the repository and running:
+lipDP requires some stuff and several libraries including Numpy. Installation can be done locally by cloning the repository and running:
 ```python
 pip install -e .[dev]
 ```
@@ -131,6 +124,16 @@ from deel.lipdp.model import DP_Accountant
 callbacks = [
   DP_Accountant()
 ]
+
+model.fit(
+    ds_train,
+    epochs=num_epochs,
+    validation_data=ds_test,
+    callbacks=[
+        # accounting is done thanks to a callback
+        DP_Accountant(log_fn="logging"),  # wandb.log also available.
+    ],
+)
 ```
 
 ## 📦 What's Included
