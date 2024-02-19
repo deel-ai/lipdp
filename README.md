@@ -1,7 +1,9 @@
+<p align="center">
+<img src="./docs/assets/lipdp_logo.png" alt="lipdp_logo" width="350"/></p>
 <!-- Badge section -->
 <div align="center">
     <a href="#">
-        <img src="https://img.shields.io/badge/Python-3.7, 3.8, 3.9-efefef">
+        <img src="https://img.shields.io/badge/Python-3.7, 3.8, 3.9, 3.10-efefef">
     </a>
     <a href="#">
         <img src="https://img.shields.io/badge/License-MIT-efefef">
@@ -11,7 +13,10 @@
 
 <!-- Short description of your library -->
 <p align="center">
-  <b>LipDP</b> is a Python toolkit dedicated to make people happy and fun.
+  <b>LipDP</b> is a Python toolkit dedicated to robust and certifiable learning under privacy guarantees.  
+
+
+This package is the code for the paper "*DP-SGD Without Clipping: The Lipschitz Neural Network Way*" by Louis Béthune, Thomas Massena, Thibaut Boissin, Aurélien Bellet, Franck Mamalet, Yannick Prudent, Corentin Friedrich, Mathieu Serrurier, David Vigouroux, published at the **International Conference on Learning Representations (ICLR 2024)**. The paper is available on [arxiv](https://arxiv.org/abs/2305.16202).   
 
 
 State-of-the-art approaches for training Differentially Private (DP) Deep Neural Networks (DNN) face difficulties to estimate tight bounds on the sensitivity of the network's layers, and instead rely on a process of per-sample gradient clipping. This clipping process not only biases the direction of gradients but also proves costly both in memory consumption and in computation. To provide sensitivity bounds and bypass the drawbacks of the clipping process, we propose to rely on Lipschitz constrained networks. Our theoretical analysis reveals an unexplored link between the Lipschitz constant with respect to their input and the one with respect to their parameters. By bounding the Lipschitz constant of each layer with respect to its parameters, we prove that we can train these networks with privacy guarantees.  Our analysis not only allows the computation of the aforementioned sensitivities at scale, but also provides guidance on how to maximize the gradient-to-noise ratio for fixed privacy guarantees. To facilitate the application of Lipschitz networks and foster robust and certifiable learning under privacy guarantees, we provide this Python package that implements building blocks allowing the construction and private training of such networks.
@@ -28,7 +33,6 @@ The sensitivity is computed automatically by the package, and no element-wise cl
 - [🔥 Tutorials](#-tutorials)
 - [🚀 Quick Start](#-quick-start)
 - [📦 What's Included](#-whats-included)
-- [👍 Contributing](#-contributing)
 - [👀 See Also](#-see-also)
 - [🙏 Acknowledgments](#-acknowledgments)
 - [👨‍🎓 Creator](#-creator)
@@ -39,10 +43,10 @@ The sensitivity is computed automatically by the package, and no element-wise cl
 
 We propose some tutorials to get familiar with the library and its api:
 
-- [Demo on MNIST](https://colab.research.google.com/github/deel-ai/lipdp/blob/main/docs/notebooks/basic_mnist.ipynb) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/lipdp/blob/main/docs/notebooks/basic_mnist.ipynb) </sub>
-- [Demo on CIFAR10](https://colab.research.google.com/github/deel-ai/lipdp/blob/main/docs/notebooks/basic_mnist.ipynb) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deel-ai/lipdp/blob/main/docs/notebooks/basic_mnist.ipynb) </sub>
+- [Demo on MNIST](https://colab.research.google.com/github/Algue-Rythme/lip-dp/blob/main/docs/notebooks/basic_mnist.ipynb) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Algue-Rythme/lip-dp/blob/main/docs/notebooks/basic_mnist.ipynb) </sub>
+- [Demo on CIFAR10](https://colab.research.google.com/github/Algue-Rythme/lip-dp/blob/main/docs/notebooks/advanced_cifar10.ipynb) <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Algue-Rythme/lip-dp/blob/main/docs/notebooks/advanced_cifar10.ipynb) </sub>
 
-## 🚀 Setup
+## 🚀 Quick Start
 
 lipDP requires some stuff and several libraries including Numpy. Installation can be
  done using Pypi:
@@ -131,7 +135,7 @@ callbacks = [
 
 ## 📦 What's Included
 
-Code can be found in the `lipdp` folder, the documentation ca be found by running
+Code can be found in the `deel/lipdp` folder, the documentation ca be found by running
  `mkdocs build` and `mkdocs serve` (or loading `site/index.html`). Experiments were
   done using the code in the `experiments` folder.
 
@@ -143,12 +147,26 @@ Other tools to perform DP-training include:
 
 ## 🙏 Acknowledgments
 
+The creators thank the whole [DEEL](https://deel-ai.com/) team for its support, and [Aurélien Bellet](http://researchers.lille.inria.fr/abellet/) for his guidance.  
 
 ## 👨‍🎓 Creators
 
+The library has been created by [Louis Béthune](https://github.com/Algue-Rythme), [Thomas Masséna](https://github.com/massena-t) during an internsip at [DEEL](https://deel-ai.com/), and [Thibaut Boissin](https://github.com/thib-s).  
 
 ## 🗞️ Citation
 
+If you find this work useful for your research, please consider citing it:
+
+```
+@inproceedings{
+bethune2024dpsgd,
+title={{DP}-{SGD} Without Clipping: The Lipschitz Neural Network Way},
+author={Louis B{\'e}thune and Thomas Massena and Thibaut Boissin and Aur{\'e}lien Bellet and Franck Mamalet and Yannick Prudent and Corentin Friedrich and Mathieu Serrurier and David Vigouroux},
+booktitle={The Twelfth International Conference on Learning Representations},
+year={2024},
+url={https://openreview.net/forum?id=BEyEziZ4R6}
+}
+```
 
 ## 📝 License
 
