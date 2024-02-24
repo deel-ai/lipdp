@@ -20,3 +20,14 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+from absl.testing import absltest
+from absl.testing import parameterized
+
+
+class SensitivityTest(parameterized.TestCase):
+    def test_lipschitz_constant(self):
+        pass
+
+
+if __name__ == "__main__":
+    absltest.main()

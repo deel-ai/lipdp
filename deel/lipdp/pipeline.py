@@ -61,7 +61,9 @@ def standardize_CIFAR(image: tf.Tensor):
 
 
 def get_colorspace_function(colorspace: str):
-    if colorspace.upper() == "RGB":
+    if colorspace is None:  # no colorspace transformation
+        return lambda x, y: (x, y)
+    elif colorspace.upper() == "RGB":
         return lambda x, y: (x, y)
     elif colorspace.upper() == "RGB_STANDARDIZED":
         return lambda x, y: (standardize_CIFAR(x), y)
@@ -71,6 +73,8 @@ def get_colorspace_function(colorspace: str):
         return lambda x, y: (tf.image.rgb_to_yiq(x), y)
     elif colorspace.upper() == "YUV":
         return lambda x, y: (tf.image.rgb_to_yuv(x), y)
+    elif colorspace.upper() == "GRAYSCALE":
+        return lambda x, y: (tf.image.rgb_to_grayscale(x), y)
     else:
         raise ValueError("Incorrect representation argument in config")
 
@@ -267,6 +271,10 @@ def load_and_prepare_images_data(
     nb_classes = ds_info.features["label"].num_classes
     input_shape = ds_info.features["image"].shape
     if bound_fct is None:
+        # TODO: consider throwing an error here to avoid unexpected behavior.
+        print(
+            "No bound function provided, using default bound sqrt(w*h*c) for the input."
+        )
         bound_fct = (
             lambda x, y: (x, y),
             float(input_shape[-3] * input_shape[-2] * input_shape[-1]),
@@ -274,6 +282,12 @@ def load_and_prepare_images_data(
     bound_callable, bound_val = bound_fct
 
     to_float = lambda x, y: (tf.cast(x, tf.float32) / 255.0, tf.one_hot(y, nb_classes))
+
+    if input_shape[-1] == 1:
+        assert (
+            colorspace == "grayscale"
+        ), "grayscale is the only valid colorspace for grayscale images"
+        colorspace = None
     color_space_fun = get_colorspace_function(colorspace)
 
     ############################

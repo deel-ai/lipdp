@@ -188,7 +188,7 @@ def train():
     ds_train, ds_test, dataset_metadata = load_and_prepare_images_data(
         "mnist",
         cfg.batch_size,
-        colorspace="RGB",
+        colorspace="grayscale",
         drop_remainder=True,
         bound_fct=bound_normalize(),
     )

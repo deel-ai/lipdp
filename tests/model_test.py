@@ -20,3 +20,16 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import tensorflow as tf
+from absl.testing import absltest
+from absl.testing import parameterized
+
+
+class ModelTest(parameterized.TestCase):
+    def test_create_model(self):
+        pass
+
+
+if __name__ == "__main__":
+    tf.config.set_visible_devices([], "GPU")
+    absltest.main()
