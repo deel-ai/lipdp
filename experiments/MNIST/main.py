@@ -68,7 +68,7 @@ def default_cfg_mnist():
     cfg.loss = "TauCategoricalCrossentropy"
     cfg.log_wandb = "disabled"
     cfg.noise_multiplier = 1.5
-    cfg.noisify_strategy = "local"
+    cfg.noisify_strategy = "per-layer"
     cfg.optimizer = "Adam"
     cfg.opt_iterations = None
     cfg.save = False

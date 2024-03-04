@@ -2,6 +2,7 @@ setuptools
 pre-commit
 ml_collections
 absl-py
+pytest
 tox
 black
 pytest

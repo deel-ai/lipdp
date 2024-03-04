@@ -27,9 +27,11 @@ from absl.testing import parameterized
 from deel.lipdp.pipeline import bound_clip_value
 from deel.lipdp.pipeline import bound_normalize
 from deel.lipdp.pipeline import load_and_prepare_images_data
+from deel.lipdp.pipeline import default_delta_value
 
 
 class PipelineTest(parameterized.TestCase):
+
     def test_cifar10_common(self):
         batch_size = 64
         max_norm = 5e-2
@@ -41,7 +43,7 @@ class PipelineTest(parameterized.TestCase):
             colorspace=colorspace,
             drop_remainder=True,  # accounting assumes fixed batch size.
             bound_fct=bound_clip_value(max_norm),
-            multiplicity=0,  # no multiplicity for mnist
+            multiplicity=0,  # no multiplicity for cifar10
         )
 
         self.assertEqual(dataset_metadata.nb_classes, 10)
@@ -62,6 +64,8 @@ class PipelineTest(parameterized.TestCase):
         self.assertEqual(batch_sizes[-1], batch_size)
         self.assertEqual(len(batch_sizes), 50_000 // batch_size)
         self.assertEqual(dataset_metadata.nb_steps_per_epochs, len(batch_sizes))
+        delta_heuristic = default_delta_value(dataset_metadata)
+        self.assertLessEqual(dataset_metadata.nb_samples_train, 1./delta_heuristic)
 
     @parameterized.parameters(("RGB",), ("grayscale",), ("HSV",))
     def test_cifar10_colorspace(self, colorspace):
@@ -74,7 +78,7 @@ class PipelineTest(parameterized.TestCase):
             colorspace=colorspace,
             drop_remainder=True,  # accounting assumes fixed batch size.
             bound_fct=bound_clip_value(max_norm),
-            multiplicity=0,  # no multiplicity for mnist
+            multiplicity=0,  # no multiplicity for cifar10
         )
 
         batch = next(iter(ds_test))
@@ -98,7 +102,7 @@ class PipelineTest(parameterized.TestCase):
             colorspace=colorspace,
             drop_remainder=True,  # accounting assumes fixed batch size.
             bound_fct=bound_clip_value(max_norm),
-            multiplicity=multiplicity,  # no multiplicity for mnist
+            multiplicity=multiplicity,
         )
 
         self.assertEqual(dataset_metadata.batch_size, batch_size)
