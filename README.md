@@ -3,7 +3,7 @@
 <!-- Badge section -->
 <div align="center">
     <a href="#">
-        <img src="https://img.shields.io/badge/Python-3.7, 3.8, 3.9, 3.10-efefef">
+        <img src="https://img.shields.io/badge/Python-3.9, 3.10, 3.11-efefef">
     </a>
     <a href="#">
         <img src="https://img.shields.io/badge/License-MIT-efefef">
