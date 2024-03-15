@@ -69,8 +69,6 @@ from deel.lipdp.pipeline import (
 )
 from deel.lipdp.sensitivity import (
     get_max_epochs,
-    gradient_norm_check,
-    check_layer_gradient_norm,
 )
 from deel.lipdp.utils import (
     CertifiableAUROC,

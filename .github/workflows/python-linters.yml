@@ -1,0 +1,28 @@
+name: lip-dp linters
+
+on:
+  push:
+    branches:
+      - main
+      - release-no-advertising
+  pull_request:
+    branches:
+      - main
+      - release-no-advertising
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install tox
+    - name: Check lint
+      run: tox -e py311-lint

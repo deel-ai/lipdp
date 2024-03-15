@@ -26,13 +26,14 @@ from absl.testing import parameterized
 
 from deel.lipdp.dynamic import AdaptiveQuantileClipping
 from deel.lipdp.layers import *
-from deel.lipdp.model import DP_Sequential, DPParameters
-from deel.lipdp.pipeline import bound_normalize, load_and_prepare_images_data
 from deel.lipdp.losses import DP_TauCategoricalCrossentropy
+from deel.lipdp.model import DP_Sequential
+from deel.lipdp.model import DPParameters
+from deel.lipdp.pipeline import bound_normalize
+from deel.lipdp.pipeline import load_and_prepare_images_data
 
 
 class ModelTest(parameterized.TestCase):
-
     def _get_mnist_cnn(self):
         ds_train, _, dataset_metadata = load_and_prepare_images_data(
             "mnist",
@@ -62,13 +63,13 @@ class ModelTest(parameterized.TestCase):
             DP_SpectralDense(10, use_bias=False, kernel_initializer="orthogonal"),
             DP_AddBias(norm_max=norm_max),
             DP_ClipGradient(
-                clip_value=2. ** 0.5,
+                clip_value=2.0**0.5,
                 mode="dynamic",
             ),
         ]
 
         dp_parameters = DPParameters(
-            noisify_strategy='per-layer',
+            noisify_strategy="per-layer",
             noise_multiplier=2.2,
             delta=1e-5,
         )
@@ -81,7 +82,7 @@ class ModelTest(parameterized.TestCase):
 
         optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
         loss = DP_TauCategoricalCrossentropy(
-            tau=1., reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
+            tau=1.0, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
         model.compile(optimizer=optimizer, loss=loss, metrics=["accuracy"])
 
@@ -97,9 +98,7 @@ class ModelTest(parameterized.TestCase):
         input_shape = (32, 32, 3)
 
         patch_size = 4
-        seq_len = (input_shape[0] // patch_size) * (
-            input_shape[1] // patch_size
-        )
+        seq_len = (input_shape[0] // patch_size) * (input_shape[1] // patch_size)
         multiplier = 1
         mlp_seq_dim = multiplier * seq_len
 
@@ -139,7 +138,9 @@ class ModelTest(parameterized.TestCase):
         )
         adaptive.set_model(model)
         callbacks = [adaptive]
-        model.fit(ds_train, epochs=2, callbacks=callbacks, steps_per_epoch=num_steps_test_case)
+        model.fit(
+            ds_train, epochs=2, callbacks=callbacks, steps_per_epoch=num_steps_test_case
+        )
 
 
 if __name__ == "__main__":

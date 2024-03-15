@@ -1,22 +1,26 @@
 <p align="center">
-<img src="./docs/assets/lipdp_logo.png" alt="lipdp_logo" width="350"/></p>
+<img src="./docs/assets/lipdp_logo.png" alt="lipdp_logo" width="300"/></p>
 <!-- Badge section -->
 <div align="center">
     <a href="#">
-        <img src="https://img.shields.io/badge/Python-3.9|3.10|3.11-efefef">
+        <img src="https://img.shields.io/badge/Python-3.9 | 3.10 | 3.11-efefef">
     </a>
     <a href="https://github.com/Algue-Rythme/lip-dp/actions/workflows/tests.yml">
         <img alt="Tests" src="https://github.com/Algue-Rythme/lip-dp/actions/workflows/tests.yml/badge.svg?branch=release-no-advertising">
+    </a>
+    <a href="https://github.com/Algue-Rythme/lip-dp/actions/workflows/python-linters.yml">
+        <img alt="Linter" src="https://github.com/Algue-Rythme/lip-dp/actions/workflows/python-linters.yml/badge.svg?branch=release-no-advertising">
     </a>
     <a href="#">
         <img src="https://img.shields.io/badge/License-MIT-efefef">
     </a>
 </div>
-<br>
+</p>
 
 <!-- Short description of your library -->
 <p align="center">
   <b>LipDP</b> is a Python toolkit dedicated to robust and certifiable learning under privacy guarantees.  
+</p>
 
 
 This package is the code for the paper "*DP-SGD Without Clipping: The Lipschitz Neural Network Way*" by Louis Béthune, Thomas Massena, Thibaut Boissin, Aurélien Bellet, Franck Mamalet, Yannick Prudent, Corentin Friedrich, Mathieu Serrurier, David Vigouroux, published at the **International Conference on Learning Representations (ICLR 2024)**. The paper is available on [arxiv](https://arxiv.org/abs/2305.16202).   

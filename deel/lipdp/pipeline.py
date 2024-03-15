@@ -354,9 +354,11 @@ def load_and_prepare_images_data(
         nb_samples_train=ds_info.splits["train"].num_examples,
         nb_samples_test=ds_info.splits["test"].num_examples,
         class_names=ds_info.features["label"].names,
-        nb_steps_per_epochs=ds_train.cardinality().numpy()
-        if ds_train.cardinality() > 0  # handle case cardinality return -1 (unknown)
-        else ds_info.splits["train"].num_examples / batch_size,
+        nb_steps_per_epochs=(
+            ds_train.cardinality().numpy()
+            if ds_train.cardinality() > 0  # handle case cardinality return -1 (unknown)
+            else ds_info.splits["train"].num_examples / batch_size
+        ),
         batch_size=batch_size,
         max_norm=bound_val,
     )
@@ -493,9 +495,11 @@ def prepare_tabular_data(
         nb_samples_train=x_train.shape[0],
         nb_samples_test=x_test.shape[0],
         class_names=[str(i) for i in range(nb_classes)],
-        nb_steps_per_epochs=ds_train.cardinality().numpy()
-        if ds_train.cardinality() > 0  # handle case cardinality return -1 (unknown)
-        else x_train.shape[0] / batch_size,
+        nb_steps_per_epochs=(
+            ds_train.cardinality().numpy()
+            if ds_train.cardinality() > 0  # handle case cardinality return -1 (unknown)
+            else x_train.shape[0] / batch_size
+        ),
         batch_size=batch_size,
         max_norm=bound_val,
     )

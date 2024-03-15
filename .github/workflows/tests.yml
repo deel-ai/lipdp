@@ -2,9 +2,9 @@ name: tests
 
 on:
   push:
-    branches: ["release-no-advertising"]
+    branches: ["main", "release-no-advertising"]
   pull_request:
-    branches: ["release-no-advertising"]
+    branches: ["main", "release-no-advertising"]
 
 jobs:
   build-and-test:

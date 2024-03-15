@@ -25,14 +25,17 @@ from absl.testing import parameterized
 
 from deel.lipdp.dynamic import AdaptiveQuantileClipping
 from deel.lipdp.layers import *
-from deel.lipdp.model import DP_Sequential, DPParameters, get_eps_delta, compute_gradient_bounds
-from deel.lipdp.pipeline import bound_normalize, load_and_prepare_images_data
 from deel.lipdp.losses import DP_TauCategoricalCrossentropy
-from deel.lipdp.sensitivity import get_max_epochs, gradient_norm_check
+from deel.lipdp.model import compute_gradient_bounds
+from deel.lipdp.model import DP_Sequential
+from deel.lipdp.model import DPParameters
+from deel.lipdp.model import get_eps_delta
+from deel.lipdp.pipeline import bound_normalize
+from deel.lipdp.pipeline import load_and_prepare_images_data
+from deel.lipdp.sensitivity import get_max_epochs
 
 
 class SensitivityTest(parameterized.TestCase):
-
     def _get_small_mnist_cnn(self, dp_parameters, batch_size):
         ds_train, _, dataset_metadata = load_and_prepare_images_data(
             "mnist",
@@ -62,7 +65,7 @@ class SensitivityTest(parameterized.TestCase):
             DP_SpectralDense(10, use_bias=False, kernel_initializer="orthogonal"),
             DP_AddBias(norm_max=norm_max),
             DP_ClipGradient(
-                clip_value=2. ** 0.5,
+                clip_value=2.0**0.5,
                 mode="dynamic",
             ),
         ]
@@ -75,17 +78,19 @@ class SensitivityTest(parameterized.TestCase):
 
         optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
         loss = DP_TauCategoricalCrossentropy(
-            tau=1., reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
+            tau=1.0, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
         model.compile(optimizer=optimizer, loss=loss, metrics=["accuracy"])
 
         return model, ds_train
-    
+
     @parameterized.parameters(
-        ('per-layer', 0.8, 1e-5, 22.0, True),
-        ('global', 1.2, 1e-6, 30.0, False),
+        ("per-layer", 0.8, 1e-5, 22.0, True),
+        ("global", 1.2, 1e-6, 30.0, False),
     )
-    def test_get_max_epochs(self, noisify_strategy, noise_multiplier, delta, epsilon_max, safe):
+    def test_get_max_epochs(
+        self, noisify_strategy, noise_multiplier, delta, epsilon_max, safe
+    ):
         dp_parameters = DPParameters(
             noisify_strategy=noisify_strategy,
             noise_multiplier=noise_multiplier,
@@ -95,31 +100,59 @@ class SensitivityTest(parameterized.TestCase):
         model, _ = self._get_small_mnist_cnn(dp_parameters, batch_size=64)
 
         atol = 1e-2
-        epochs = get_max_epochs(epsilon_max, model, epochs_max=None, safe=safe, atol=atol)
+        epochs = get_max_epochs(
+            epsilon_max, model, epochs_max=None, safe=safe, atol=atol
+        )
 
         if not safe:
             epochs += 1
-        
+
         cur_epsilon, cur_delta = get_eps_delta(model, epochs)
         next_epsilon, _ = get_eps_delta(model, epochs + 1)
 
-        self.assertLessEqual(cur_epsilon, epsilon_max+atol)
-        self.assertGreaterEqual(next_epsilon+atol, epsilon_max)
+        self.assertLessEqual(cur_epsilon, epsilon_max + atol)
+        self.assertGreaterEqual(next_epsilon + atol, epsilon_max)
         self.assertLessEqual(cur_delta, delta)
 
     def test_gradient_bounds(self):
         dp_parameters = DPParameters(
-            noisify_strategy='per-layer',
+            noisify_strategy="per-layer",
             noise_multiplier=2.2,
             delta=1e-5,
         )
 
-        model, ds_train = self._get_small_mnist_cnn(dp_parameters, batch_size=2)
-        examples = ds_train.take(1).as_numpy_iterator().next()[0]
+        batch_size = 16
 
-        upper_bounds = compute_gradient_bounds(model)
-        
-        gradient_norm_check(upper_bounds, model, examples)
+        model, ds_train = self._get_small_mnist_cnn(
+            dp_parameters, batch_size=batch_size
+        )
+        x, y = iter(ds_train.take(1)).next()
+
+        loss_fn = DP_TauCategoricalCrossentropy(
+            tau=1.0, reduction=tf.keras.losses.Reduction.NONE
+        )
+
+        with tf.GradientTape(persistent=True) as tape:
+            y_pred = model(x, training=True)
+            loss = loss_fn(y, y_pred)
+            loss = tf.reshape(loss, (batch_size, 1))
+
+        trainable_vars = model.trainable_variables
+        gradient_per_variable = tape.jacobian(loss, trainable_vars)
+        del tape
+
+        gradient_bounds = compute_gradient_bounds(model)
+
+        atol = 1e-5
+        assert len(gradient_bounds) == len(gradient_per_variable)
+        print(list(gradient_bounds.values()))
+        for grad, bound in zip(gradient_per_variable, gradient_bounds.values()):
+            grad = tf.reshape(grad, (grad.shape[0], -1))
+            norm2 = tf.reduce_sum(grad**2, axis=-1) ** 0.5
+            norm2 = tf.reduce_max(norm2)
+            # correct for the batch size since reduction is None:
+            bound = bound * batch_size
+            self.assertLessEqual(norm2, bound + atol)
 
 
 if __name__ == "__main__":

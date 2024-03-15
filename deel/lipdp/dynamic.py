@@ -20,6 +20,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+"""Dynamic gradient clipping for differential privacy."""
 import random
 from abc import abstractmethod
 
@@ -66,9 +67,11 @@ class LossGradientClipping(keras.callbacks.Callback):
 
     def get_gradloss(self):
         """Computes the norm of gradient of the loss with respect to the model's output.
-        
-        Warning: this method is unsafe from a privacy perspective, as the true gradient bound is computed.
-        It is meant to be used with privacy-preserving methods only, such as the ones implemented in this module.
+
+        Warning: this method is unsafe from a privacy perspective,
+            as the true gradient bound is computed.
+        It is meant to be used with privacy-preserving methods only,
+            such as the ones implemented in this module.
         """
         batch = next(iter(self.ds_train.take(1)))
         imgs, labels = batch
