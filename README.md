@@ -3,7 +3,10 @@
 <!-- Badge section -->
 <div align="center">
     <a href="#">
-        <img src="https://img.shields.io/badge/Python-3.9, 3.10, 3.11-efefef">
+        <img src="https://img.shields.io/badge/Python-3.9|3.10|3.11-efefef">
+    </a>
+    <a href="https://github.com/Algue-Rythme/lip-dp/actions/workflows/tests.yml">
+        <img alt="Tests" src="https://github.com/Algue-Rythme/lip-dp/actions/workflows/tests.yml/badge.svg?branch=release-no-advertising">
     </a>
     <a href="#">
         <img src="https://img.shields.io/badge/License-MIT-efefef">
