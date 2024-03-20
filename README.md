@@ -1,86 +1,38 @@
-# Purpose of this library :
+<p align="center">
+<img src="./docs/assets/lipdp_logo.png" alt="lipdp_logo" width="300"/></p>
+<!-- Badge section -->
+<div align="center">
+    <a href="#">
+        <img src="https://img.shields.io/badge/Python-3.9 | 3.10 | 3.11-efefef">
+    </a>
+    <a href="https://github.com/deel-ai/lipdp/actions/workflows/tests.yml">
+        <img alt="Tests" src="https://github.com/deel-ai/lipdp/actions/workflows/tests.yml/badge.svg?branch=release-no-advertising">
+    </a>
+    <a href="https://github.com/deel-ai/lipdp/actions/workflows/python-linters.yml">
+        <img alt="Linter" src="https://github.com/deel-ai/lipdp/actions/workflows/python-linters.yml/badge.svg?branch=release-no-advertising">
+    </a>
+    <a href="#">
+        <img src="https://img.shields.io/badge/License-MIT-efefef">
+    </a>
+</div>
+</p>
 
-Conventionally, Differentially Private ML training relies on Gradient Clipping to guarantee verifiable privacy guarantees.
-By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based
-DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
-batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
-
-Therefore, the computation time is heavily reduced and the results on the MNIST and CIFAR10 datasets are the following :
-
-
-# Status of the repository : 
-
-- ci tests to develop.
-- sensitivity.py to debug.
-- requirements.txt tested on my machine, still to check by someone else.
-
-# Deel library repository template
-
-Ce dépôt git sert de template pour les librairies DEEL ayant vocation à être rendues publiques sur github.
-Il donne la structure des répertoires d'un projet telle que celle adoptée par les librairies DEEL déjà publiques.
-
-A la racine du projet on trouve:
-
-- deel : répertoire destiné à recevoir le code de la librairie. C'est le premier mot de l'espaces de nommage de
-        la librairie. Ce n'est pas un module python, il ne contient donc pas de fichier __init__.py.
-        Il contient le module principal de la librairie du nom de cette librairie.
-        
-        Example: 
-        
-        librairie **deel-lip**:
-                    deel/deel-lip       
-
-- docs: répertoire destiné à la documentation de la librairie
-
-- tests: répertoire des tests unitaires
-
-- .pre-commit-config.yaml : configuration de outil de contrôle avant commit (pre-commit)
-
-- LICENCE/headers/MIT-Clause.txt : entête licence MIT injectée dans les fichiers du projet
-
-- CONTRIBUTING.md: description de la procédure pour apporter une contribution à la librairie.
-
-- GOUVERNANCE.md: description de la manière dont la librairie est gérée.
-
-- LICENCE : texte de la licence sous laquelle est publiée la librairie (MIT).
-
-- README.md 
+<!-- Short description of your library -->
+<p align="center">
+  <b>LipDP</b> is a Python toolkit dedicated to robust and certifiable learning under privacy guarantees.  
+</p>
 
 
-# pre-commit : Conventional Commits 1.0.0
+This package is the code for the paper "*DP-SGD Without Clipping: The Lipschitz Neural Network Way*" by Louis Béthune, Thomas Massena, Thibaut Boissin, Aurélien Bellet, Franck Mamalet, Yannick Prudent, Corentin Friedrich, Mathieu Serrurier, David Vigouroux, published at the **International Conference on Learning Representations (ICLR 2024)**. The paper is available on [arxiv](https://arxiv.org/abs/2305.16202).   
 
-The commit message should be structured as follows:
 
-```
-<type>[optional scope]: <description>
+State-of-the-art approaches for training Differentially Private (DP) Deep Neural Networks (DNN) face difficulties to estimate tight bounds on the sensitivity of the network's layers, and instead rely on a process of per-sample gradient clipping. This clipping process not only biases the direction of gradients but also proves costly both in memory consumption and in computation. To provide sensitivity bounds and bypass the drawbacks of the clipping process, we propose to rely on Lipschitz constrained networks. Our theoretical analysis reveals an unexplored link between the Lipschitz constant with respect to their input and the one with respect to their parameters. By bounding the Lipschitz constant of each layer with respect to its parameters, we prove that we can train these networks with privacy guarantees.  Our analysis not only allows the computation of the aforementioned sensitivities at scale, but also provides guidance on how to maximize the gradient-to-noise ratio for fixed privacy guarantees. To facilitate the application of Lipschitz networks and foster robust and certifiable learning under privacy guarantees, we provide this Python package that implements building blocks allowing the construction and private training of such networks.
 
-[optional body]
+![backpropforbounds](./docs/assets/backprop_v2.png)
 
-[optional footer(s)]
+The sensitivity is computed automatically by the package, and no element-wise clipping is required. This is translated into a new DP-SGD algorithm, called Clipless DP-SGD, that is faster and more memory efficient than DP-SGD with clipping.
 
-```
-
-The commit contains the following structural elements, to communicate intent to the consumers of your library:
-
-- fix: a commit of the type fix patches a bug in your codebase (this correlates with PATCH in Semantic Versioning).
-
-- feat: a commit of the type feat introduces a new feature to the codebase (this correlates with MINOR in Semantic Versioning).
-
-- BREAKING CHANGE: a commit that has a footer BREAKING CHANGE:, or appends a ! after the type/scope, introduces a breaking API change (correlating with MAJOR in Semantic Versioning). A BREAKING CHANGE can be part of commits of any type.
-
-- types other than fix: and feat: are allowed, for example @commitlint/config-conventional (based on the the Angular convention) recommends *build:, chore:, ci:, docs:, style:, refactor:, perf:, test:*, and [others](https://delicious-insights.com/fr/articles/git-hooks-et-commitlint/).
- 
-- footers other than BREAKING CHANGE: <description> may be provided and follow a convention similar to git trailer format.
-
-- Additional types are not mandated by the Conventional Commits specification, and have no implicit effect in Semantic Versioning (unless they include a BREAKING CHANGE). A scope may be provided to a commit’s type, to provide additional contextual information and is contained within parenthesis, e.g., feat(parser): add ability to parse arrays.
-
-# README sections
-
-Conventionally, Differentially Private ML training relies on Gradient Clipping to guarantee verifiable privacy guarantees.
-By using 1-Lipschitz networks developped by the deel-lip project. We can propose a new alternative to gradient clipping based
-DP ML. Indeed, by theoretically bounding the value of the sensitivity of our 1-Lipschitz layers, we can directly calibrate a
-batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
-
+![speed](./docs/assets/all_speed_curves.png)
 
 ## 📚 Table of contents
 
@@ -88,7 +40,6 @@ batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
 - [🔥 Tutorials](#-tutorials)
 - [🚀 Quick Start](#-quick-start)
 - [📦 What's Included](#-whats-included)
-- [👍 Contributing](#-contributing)
 - [👀 See Also](#-see-also)
 - [🙏 Acknowledgments](#-acknowledgments)
 - [👨‍🎓 Creator](#-creator)
@@ -97,68 +48,135 @@ batchwise noising of the gradients to guarantee (epsilon,delta)-DP.
 
 ## 🔥 Tutorials
 
+We propose some tutorials to get familiar with the library and its API:
 
+- **Demo on MNIST** <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1s3LBIxf0x1sOMQUw6BHpxbeUzmwtaP0d) </sub>
+- **Demo on CIFAR10** <sub> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1RbALHN-Eib6CCUznLrbiETX7JJrFaUB0) </sub>
 
 ## 🚀 Quick Start
 
-Libname requires some stuff and several libraries including Numpy. Installation can be done using Pypi:
-
+lipDP requires some stuff and several libraries including Numpy. Installation can be done locally by cloning the repository and running:
 ```python
-pip install dist/lipdp-0.0.1a0-py2.py3-none-any.whl[dev]
+pip install -e .[dev]
 ```
 
-Now that lipdp is installed, here are some basic examples of what you can do with the
- available modules.
+### Setup privacy parameters
+
+Parameters are stored in a dataclass:
+
+```python
+from deel.lipdp.model import DPParameters
+dp_parameters = DPParameters(
+    noisify_strategy="local",
+    noise_multiplier=4.0,
+    delta=1e-5,
+)
+
+epsilon_max = 10.0
+```
+
+### Setup DP model
+
+```python
+# construct DP_Sequential
+model = DP_Sequential(
+    # works like usual sequential but requires DP layers
+    layers=[
+        # BoundedInput works like Input, but performs input clipping to guarantee input bound
+        layers.DP_BoundedInput(
+            input_shape=dataset_metadata.input_shape, upper_bound=input_upper_bound
+        ),
+        layers.DP_QuickSpectralConv2D( # Reshaped Kernel Orthogonalization (RKO) convolution.
+            filters=32,
+            kernel_size=3,
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,  # No biases since the framework handles a single tf.Variable per layer.
+        ),
+        layers.DP_GroupSort(2),  # GNP activation function.
+        layers.DP_ScaledL2NormPooling2D(pool_size=2, strides=2),  # GNP pooling.
+        layers.DP_QuickSpectralConv2D( # Reshaped Kernel Orthogonalization (RKO) convolution.
+            filters=64,
+            kernel_size=3,
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,  # No biases since the framework handles a single tf.Variable per layer.
+        ),
+        layers.DP_GroupSort(2),  # GNP activation function.
+        layers.DP_ScaledL2NormPooling2D(pool_size=2, strides=2),  # GNP pooling.
+        
+        layers.DP_Flatten(),   # Convert features maps to flat vector.
+        
+        layers.DP_QuickSpectralDense(512),  # GNP layer with orthogonal weight matrix.
+        layers.DP_GroupSort(2),
+        layers.DP_QuickSpectralDense(dataset_metadata.nb_classes),
+    ],
+    dp_parameters=dp_parameters,
+    dataset_metadata=dataset_metadata,
+)
+```
+
+### Setup accountant
+
+The privacy accountant is composed of different mechanisms from `autodp` package that are combined to provide a privacy accountant for Clipless DP-SGD algorithm:
+
+![rdpaccountant](./docs/assets/fig_accountant.png)
+
+
+Adding a privacy accountant to your model is straighforward:
+
+```python
+from deel.lipdp.model import DP_Accountant
+
+callbacks = [
+  DP_Accountant()
+]
+
+model.fit(
+    ds_train,
+    epochs=num_epochs,
+    validation_data=ds_test,
+    callbacks=[
+        # accounting is done thanks to a callback
+        DP_Accountant(log_fn="logging"),  # wandb.log also available.
+    ],
+)
+```
 
 ## 📦 What's Included
 
-Code can be found in the `lipdp` folder, the documentation ca be found by running
+Code can be found in the `deel/lipdp` folder, the documentation ca be found by running
  `mkdocs build` and `mkdocs serve` (or loading `site/index.html`). Experiments were
   done using the code in the `experiments` folder.
 
-## 👍 Contributing
+Other tools to perform DP-training include:
 
-Feel free to propose your ideas or come and contribute with us on the Libname toolbox! We have a specific document where we describe in a simple way how to make your first pull request: [just here](CONTRIBUTING.md).
-
-### pre-commit : Conventional Commits 1.0.0
-
-The commit message should be structured as follows:
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-
-```
-
-The commit contains the following structural elements, to communicate intent to the consumers of your library:
-
-- fix: a commit of the type fix patches a bug in your codebase (this correlates with PATCH in Semantic Versioning).
-
-- feat: a commit of the type feat introduces a new feature to the codebase (this correlates with MINOR in Semantic Versioning).
-
-- BREAKING CHANGE: a commit that has a footer BREAKING CHANGE:, or appends a ! after the type/scope, introduces a breaking API change (correlating with MAJOR in Semantic Versioning). A BREAKING CHANGE can be part of commits of any type.
-
-- types other than fix: and feat: are allowed, for example @commitlint/config-conventional (based on the the Angular convention) recommends *build:, chore:, ci:, docs:, style:, refactor:, perf:, test:*, and [others](https://delicious-insights.com/fr/articles/git-hooks-et-commitlint/).
- 
-- footers other than BREAKING CHANGE: <description> may be provided and follow a convention similar to git trailer format.
-
-- Additional types are not mandated by the Conventional Commits specification, and have no implicit effect in Semantic Versioning (unless they include a BREAKING CHANGE). A scope may be provided to a commit’s type, to provide additional contextual information and is contained within parenthesis, e.g., feat(parser): add ability to parse arrays.
-
+- [tensorflow-privacy](https://github.com/tensorflow/privacy) in Tensorflow
+- [Opacus](https://opacus.ai/) in Pytorch
+- [jax-privacy](https://github.com/google-deepmind/jax_privacy) in Jax
 
 ## 🙏 Acknowledgments
 
+The creators thank the whole [DEEL](https://deel-ai.com/) team for its support, and [Aurélien Bellet](http://researchers.lille.inria.fr/abellet/) for his guidance.  
 
 ## 👨‍🎓 Creators
 
-If you want to highlights the main contributors
-
+The library has been created by [Louis Béthune](https://github.com/Algue-Rythme), [Thomas Masséna](https://github.com/massena-t) during an internsip at [DEEL](https://deel-ai.com/), and [Thibaut Boissin](https://github.com/thib-s).  
 
 ## 🗞️ Citation
 
+If you find this work useful for your research, please consider citing it:
 
+```
+@inproceedings{
+bethune2024dpsgd,
+title={{DP}-{SGD} Without Clipping: The Lipschitz Neural Network Way},
+author={Louis B{\'e}thune and Thomas Massena and Thibaut Boissin and Aur{\'e}lien Bellet and Franck Mamalet and Yannick Prudent and Corentin Friedrich and Mathieu Serrurier and David Vigouroux},
+booktitle={The Twelfth International Conference on Learning Representations},
+year={2024},
+url={https://openreview.net/forum?id=BEyEziZ4R6}
+}
+```
 
 ## 📝 License
 

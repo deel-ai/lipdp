@@ -25,10 +25,11 @@ import math
 import numpy as np
 import tensorflow as tf
 
+from deel.lipdp.model import compute_gradient_bounds
 from deel.lipdp.model import get_eps_delta
 
 
-def get_max_epochs(epsilon_max, model, epochs_max=1024):
+def get_max_epochs(epsilon_max, model, epochs_max=1024, safe=True, atol=1e-2):
     """Return the maximum number of epochs to reach a given epsilon_max value.
 
     The computation of (epsilon, delta) is slow since it involves solving a minimization problem
@@ -45,17 +46,19 @@ def get_max_epochs(epsilon_max, model, epochs_max=1024):
         model: The model used to compute the values of epsilon.
         epochs_max: The maximum number of epochs to reach epsilon_max. Defaults to 1024.
                     If None, the dichotomy search is used to find the upper bound.
+        safe: If True, the dichotomy search returns the largest number of epochs such that epsilon <= epsilon_max.
+              Otherwise, it returns the smallest number of epochs such that epsilon >= epsilon_max.
+        atol: The absolute tolerance to panic on numerical inaccuracy. Defaults to 1e-2.
 
     Returns:
-        The maximum number of epochs to reach epsilon_max."""
+        The maximum number of epochs to reach epsilon_max. It may be zero if epsilon_max is too small.
+    """
     steps_per_epoch = model.dataset_metadata.nb_steps_per_epochs
 
     def fun(epoch):
         if epoch == 0:
             epsilon = 0
         else:
-            epoch = round(epoch)
-            niter = (epoch + 1) * steps_per_epoch
             epsilon, _ = get_eps_delta(model, epoch)
         return epsilon
 
@@ -71,7 +74,7 @@ def get_max_epochs(epsilon_max, model, epochs_max=1024):
     epochs_min = 0
 
     while epochs_max - epochs_min > 1:
-        epoch = (epochs_max + epochs_min) / 2
+        epoch = (epochs_max + epochs_min) // 2
         epsilon = fun(epoch)
         if epsilon < epsilon_max:
             epochs_min = epoch
@@ -81,46 +84,21 @@ def get_max_epochs(epsilon_max, model, epochs_max=1024):
             f"epoch bounds = {epochs_min, epochs_max} and epsilon = {epsilon} at epoch {epoch}"
         )
 
-    return int(round(epoch))
+    if safe:
+        last_epsilon = fun(epochs_min)
+        error = last_epsilon - epsilon_max
+        if error <= 0:
+            return epochs_min
+        elif error < atol:
+            # This branch should never be taken if fun is a non-decreasing function of the number of epochs.
+            # fun is mathematcally non-decreasing, but numerical inaccuracy can lead to this case.
+            print(
+                f"Numerical inaccuracy with error {error:.7f} in the dichotomy search: using a conservative value."
+            )
+            return epochs_min - 1
+        else:
+            assert (
+                False,
+            ), f"Numerical inaccuracy with error {error:.7f}>{atol:.3f} in the dichotomy search."
 
-
-def gradient_norm_check(K_list, model, examples):
-    """
-    Verifies that the values of per-sample gradients on a layer never exceede a theoretical value
-    determined by our theoretical work.
-    Args :
-        Klist: The list of theoretical upper bounds we have identified for each layer and want to
-        put to the test.
-        model: The model containing the layers we are interested in. Layers must only have one trainable variable.
-        Model must have a given input_shape or has to be built.
-        examples: Relevant examples. Inputting the whole training set might prove very costly to check element wise Jacobians.
-    Returns :
-        Boolean value. True corresponds to upper bound has been validated.
-    """
-    image_axes = tuple(range(1, examples.ndim))
-    example_norms = tf.math.reduce_euclidean_norm(examples, axis=image_axes)
-    X_max = tf.reduce_max(example_norms).numpy()
-    upper_bounds = np.array(K_list) * X_max
-    assert len(model.layers) == len(upper_bounds)
-    for layer, bound in zip(model.layers, upper_bounds):
-        assert check_layer_gradient_norm(bound, layer, examples)
-
-
-def check_layer_gradient_norm(S, layer, examples):
-    l_model = tf.keras.Sequential([layer])
-    if not l_model.trainable_variables:
-        print("Not a trainable layer assuming gradient norm < |x|")
-    assert len(l_model.trainable_variables) == 1
-    with tf.GradientTape() as tape:
-        y_pred = l_model(examples, training=True)
-    trainable_vars = l_model.trainable_variables[0]
-    jacobian = tape.jacobian(y_pred, trainable_vars)
-    jacobian = tf.reshape(
-        jacobian,
-        (y_pred.shape[0], -1, np.prod(trainable_vars.shape)),
-        name="Reshaped_Gradient",
-    )
-    J_sigma = tf.linalg.svd(jacobian, full_matrices=False, compute_uv=False, name=None)
-    J_2norm = tf.reduce_max(J_sigma, axis=-1)
-    J_2norm = tf.reduce_max(J_2norm).numpy()
-    return J_2norm < S
+    return epochs_max

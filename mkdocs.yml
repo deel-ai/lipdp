@@ -1,4 +1,4 @@
-site_name: lipdp
+site_name: lip-dp
 
 # Set navigation here
 nav:
@@ -9,14 +9,15 @@ nav:
       - deel.lipdp.model module: api/model.md
       - deel.lipdp.pipeline module: api/pipeline.md
       - deel.lipdp.sensitivity module: api/sensitivity.md
-#  - Tutorials:
-#    - "Demo 0: How to use notebook in documentation": notebooks/demo_fake.ipynb
+  - Tutorials:
+    - "Basic use on MNIST": notebooks/basic_mnist.ipynb
+    - "Residuals and dynamic clipping on CIFAR10": notebooks/advanced_cifar10.ipynb
   - Contributing: CONTRIBUTING.md
 
 theme:
   name: "material"
-  logo: assets/logo.png
-  favicon: assets/logo.png
+  logo: assets/lipdp_logo.png
+  favicon: assets/lipdp_logo.png
   palette:
     - scheme: default
       primary: dark
@@ -65,5 +66,5 @@ extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
   - js/custom.js
 
-repo_name: "deel-ai/<libname>"
-repo_url: "https://github.com/deel-ai/<libname>"
+repo_name: "Algue-Rythme/lip-dp"
+repo_url: "https://github.com/Algue-Rythme/lip-dp"

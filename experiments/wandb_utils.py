@@ -42,7 +42,12 @@ def init_wandb(cfg: ConfigDict, project: str):
             cfg[key] = value
 
 
-def run_with_wandb(cfg: ConfigDict, train_function: Callable, project: str):
+def run_with_wandb(
+    cfg: ConfigDict,
+    train_function: Callable,
+    project: str,
+    allow_defaults: bool = False,
+):
     """Run an individual run or a sweep."""
     wandb.login()
     # indivudal run
@@ -57,13 +62,23 @@ def run_with_wandb(cfg: ConfigDict, train_function: Callable, project: str):
                 sweep_config = _get_sweep_config_from_yaml(cfg)
             else:
                 # default sweep config
+                assert (
+                    allow_defaults
+                ), "No sweep config specified and allow_defaults is False"
+                print("No sweep config specified, using default config.")
                 sweep_config = _get_default_sweep_config(cfg)
             sweep_id = wandb.sweep(sweep=sweep_config, project=project)
         else:
+            assert (
+                cfg.sweep_yaml_config == ""
+            ), "Cannot specify both sweep_id and sweep_yaml_config"
             sweep_id = cfg.sweep_id
-        wandb.agent(
-            sweep_id, function=train_function, project=project, count=cfg.opt_iterations
+        count = (
+            cfg.sweep_count if ("sweep_count" in cfg and cfg.sweep_count > 0) else None
         )
+        wandb.agent(sweep_id, function=train_function, project=project, count=count)
+    else:
+        raise ValueError(f"Unknown log_wandb value {cfg.log_wandb}")
 
 
 def _sanitize_sweep_config_from_cfg(sweep_config: dict, cfg: ConfigDict) -> dict:
@@ -138,7 +153,7 @@ def _get_default_sweep_config(cfg):
         },
     }
 
-    if cfg.loss == "TauCategoricalCrossentropy":
+    if cfg.loss == "TauCategoricalCrossentropy" or cfg.loss == "TauBCE":
         parameters_loss = {
             "tau": {"max": 200.0, "min": 0.001, "distribution": "log_uniform_values"},
         }

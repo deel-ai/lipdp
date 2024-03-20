@@ -27,27 +27,38 @@ from setuptools import find_namespace_packages
 from setuptools import find_packages
 from setuptools import setup
 
-this_directory = os.path.dirname(__file__)
-req_path = os.path.join(this_directory, "requirements.txt")
-req_dev_path = os.path.join(this_directory, "requirements_dev.txt")
+REQ_PATH = "requirements.txt"
+REQ_DEV_PATH = "requirements_dev.txt"
 
 install_requires = []
 
-if os.path.exists(req_path):
-    with open(req_path) as fp:
+if os.path.exists(REQ_PATH):
+    print("Loading requirements")
+    with open(REQ_PATH, encoding="utf-8") as fp:
         install_requires = [line.strip() for line in fp]
 
-if os.path.exists(req_dev_path):
-    with open(req_dev_path) as fp:
-        install_dev_requires = [line.strip() for line in fp]
+dev_requires = [
+    "setuptools",
+    "pre-commit",
+    "pytest",
+    "tox",
+    "black",
+    "pytest",
+    "pylint",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mknotebooks",
+    "bump2version",
+]
 
-readme_path = os.path.join(this_directory, "README.md")
+README_PATH = "README.md"
 readme_contents = ""
-if os.path.exists(readme_path):
-    with open(readme_path, encoding="utf8") as fp:
+if os.path.exists(README_PATH):
+    with open(README_PATH, encoding="utf8") as fp:
         readme_contents = fp.read().strip()
 
-with open(os.path.join(this_directory, "deel/lipdp/VERSION"), encoding="utf8") as f:
+with open("deel/lipdp/VERSION", encoding="utf8") as f:
     version = f.read().strip()
 
 setup(
@@ -57,7 +68,7 @@ setup(
     version=version,
     # Find the package automatically (include everything):
     packages=find_namespace_packages(include=["deel.*"]),
-    package_data={'': ['VERSION']},
+    package_data={"": ["VERSION"]},
     include_package_data=True,
     # Author information:
     # Author information:
@@ -71,12 +82,13 @@ setup(
     classifiers=[
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
     ],
     licence="MIT",
     install_requires=install_requires,
     extras_require={
-        "dev": install_dev_requires,
+        "dev": dev_requires,
     },
 )

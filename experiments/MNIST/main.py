@@ -28,65 +28,106 @@ import tensorflow as tf
 from absl import app
 from ml_collections import config_dict
 from ml_collections import config_flags
-from models_MNIST import create_ConvNet
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.callbacks import ReduceLROnPlateau
 
 import wandb
+from deel.lipdp.dynamic import AdaptiveQuantileClipping
+from deel.lipdp.layers import DP_AddBias
+from deel.lipdp.layers import DP_BoundedInput
+from deel.lipdp.layers import DP_ClipGradient
+from deel.lipdp.layers import DP_Flatten
+from deel.lipdp.layers import DP_GroupSort
+from deel.lipdp.layers import DP_LayerCentering
+from deel.lipdp.layers import DP_ScaledL2NormPooling2D
+from deel.lipdp.layers import DP_SpectralConv2D
+from deel.lipdp.layers import DP_SpectralDense
 from deel.lipdp.losses import *
 from deel.lipdp.model import DP_Accountant
+from deel.lipdp.model import DP_Sequential
 from deel.lipdp.model import DPParameters
-from deel.lipdp.pipeline import bound_clip_value
-from deel.lipdp.pipeline import load_and_prepare_data
+from deel.lipdp.pipeline import bound_normalize
+from deel.lipdp.pipeline import default_delta_value
+from deel.lipdp.pipeline import load_and_prepare_images_data
 from deel.lipdp.sensitivity import get_max_epochs
+from experiments.wandb_utils import init_wandb
+from experiments.wandb_utils import run_with_wandb
 from wandb.keras import WandbCallback
-from wandb_sweeps.src_config.wandb_utils import init_wandb
-from wandb_sweeps.src_config.wandb_utils import run_with_wandb
 
 
-cfg = config_dict.ConfigDict()
+def default_cfg_mnist():
+    cfg = config_dict.ConfigDict()
+    cfg.add_biases = True
+    cfg.batch_size = 2_000
+    cfg.clip_loss_gradient = None  # not required for dynamic clipping.
+    cfg.dynamic_clipping = "quantiles"  # can be "fixed", "laplace", "quantiles". "fixed" requires a clipping value.
+    cfg.dynamic_clipping_quantiles = (
+        0.9  # crop to 90% of the distribution of gradient norm.
+    )
+    cfg.epsilon_max = 3.0
+    cfg.input_clipping = 0.7
+    cfg.learning_rate = 5e-3
+    cfg.loss = "TauCategoricalCrossentropy"
+    cfg.log_wandb = "disabled"
+    cfg.noise_multiplier = 1.5
+    cfg.noisify_strategy = "per-layer"
+    cfg.optimizer = "Adam"
+    cfg.opt_iterations = None
+    cfg.save = False
+    cfg.save_folder = os.getcwd()
+    cfg.sweep_yaml_config = ""
+    cfg.sweep_id = ""
+    cfg.tau = 32.0
+    return cfg
 
-cfg.add_biases = True
-cfg.alpha = 50.0
-cfg.architecture = "ConvNet"
-cfg.batch_size = 8_192
-cfg.condense = True
-cfg.clip_loss_gradient = 1.0
-cfg.delta = 1e-5
-cfg.epsilon_max = 3.0
-cfg.input_clipping = 0.7
-cfg.K = 0.99
-cfg.learning_rate = 1e-2
-cfg.lip_coef = 1.0
-cfg.loss = "TauCategoricalCrossentropy"
-cfg.log_wandb = "disabled"
-cfg.min_margin = 0.5
-cfg.min_norm = 5.21
-cfg.model_name = "No_name"
-cfg.noise_multiplier = 5.0
-cfg.noisify_strategy = "local"
-cfg.optimizer = "Adam"
-cfg.N = 50_000
-cfg.num_classes = 10
-cfg.opt_iterations = 10
-cfg.run_eagerly = False
-cfg.sweep_yaml_config = ""
-cfg.save = False
-cfg.save_folder = os.getcwd()
-cfg.sweep_id = ""
-cfg.tau = 1.0
-cfg.tag = "Default"
 
+cfg = default_cfg_mnist()
 _CONFIG = config_flags.DEFINE_config_dict("cfg", cfg)
 
 
-def create_model(dp_parameters, dataset_metadata, cfg, upper_bound):
-    if cfg.architecture == "ConvNet":
-        model = create_ConvNet(dp_parameters, dataset_metadata, cfg, upper_bound)
-    elif cfg.architecture == "Dense":
-        raise NotImplementedError("Dense architecture not implemented yet")
-    else:
-        raise ValueError(f"Invalid architecture argument {cfg.architecture}")
+def create_ConvNet(dp_parameters, dataset_metadata):
+    norm_max = 1.0
+    all_layers = [
+        DP_BoundedInput(input_shape=(28, 28, 1), upper_bound=dataset_metadata.max_norm),
+        DP_SpectralConv2D(
+            filters=16,
+            kernel_size=3,
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,
+        ),
+        DP_AddBias(norm_max=norm_max),
+        DP_GroupSort(2),
+        DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
+        DP_LayerCentering(),
+        DP_SpectralConv2D(
+            filters=32,
+            kernel_size=3,
+            kernel_initializer="orthogonal",
+            strides=1,
+            use_bias=False,
+        ),
+        DP_AddBias(norm_max=norm_max),
+        DP_GroupSort(2),
+        DP_ScaledL2NormPooling2D(pool_size=2, strides=2),
+        DP_LayerCentering(),
+        DP_Flatten(),
+        DP_SpectralDense(1024, use_bias=False, kernel_initializer="orthogonal"),
+        DP_AddBias(norm_max=norm_max),
+        DP_SpectralDense(10, use_bias=False, kernel_initializer="orthogonal"),
+        DP_AddBias(norm_max=norm_max),
+        DP_ClipGradient(
+            clip_value=cfg.clip_loss_gradient,
+            mode="dynamic",
+        ),
+    ]
+    if not cfg.add_biases:
+        all_layers = [
+            layer for layer in all_layers if not isinstance(layer, DP_AddBias)
+        ]
+    model = DP_Sequential(
+        all_layers,
+        dp_parameters=dp_parameters,
+        dataset_metadata=dataset_metadata,
+    )
     return model
 
 
@@ -98,18 +139,19 @@ def compile_model(model, cfg):
         optimizer = tf.keras.optimizers.Adam(learning_rate=cfg.learning_rate)
     else:
         print("Illegal optimizer argument : ", cfg.optimizer)
+
     # Choice of loss function
     if cfg.loss == "MulticlassHKR":
         if cfg.optimizer == "SGD":
             cfg.learning_rate = cfg.learning_rate / cfg.alpha
         loss = DP_MulticlassHKR(
-            alpha=cfg.alpha,
-            min_margin=cfg.min_margin,
+            alpha=50.0,
+            min_margin=0.5,
             reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
         )
     elif cfg.loss == "MulticlassHinge":
         loss = DP_MulticlassHinge(
-            min_margin=cfg.min_margin,
+            min_margin=0.5,
             reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
         )
     elif cfg.loss == "MulticlassKR":
@@ -119,9 +161,8 @@ def compile_model(model, cfg):
             cfg.tau, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
     elif cfg.loss == "KCosineSimilarity":
-        KX_min = cfg.K * cfg.min_norm
         loss = DP_KCosineSimilarity(
-            KX_min, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
+            0.99, reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE
         )
     elif cfg.loss == "MAE":
         loss = DP_MeanAbsoluteError(
@@ -129,6 +170,7 @@ def compile_model(model, cfg):
         )
     else:
         raise ValueError(f"Illegal loss argument {cfg.loss}")
+
     # Compile model
     model.compile(
         # decreasing alpha and increasing min_margin improve robustness (at the cost of accuracy)
@@ -136,7 +178,6 @@ def compile_model(model, cfg):
         loss=loss,
         optimizer=optimizer,
         metrics=["accuracy"],
-        run_eagerly=cfg.run_eagerly,
     )
     return model
 
@@ -144,34 +185,42 @@ def compile_model(model, cfg):
 def train():
     init_wandb(cfg=cfg, project="MNIST_ClipLess_SGD")
 
-    ds_train, ds_test, dataset_metadata = load_and_prepare_data(
+    ds_train, ds_test, dataset_metadata = load_and_prepare_images_data(
         "mnist",
         cfg.batch_size,
-        colorspace="RGB",
+        colorspace="grayscale",
         drop_remainder=True,
-        bound_fct=bound_clip_value(cfg.input_clipping),
+        bound_fct=bound_normalize(),
     )
-    model = create_model(
+
+    model = create_ConvNet(
         DPParameters(
             noisify_strategy=cfg.noisify_strategy,
             noise_multiplier=cfg.noise_multiplier,
-            delta=cfg.delta,
+            delta=default_delta_value(dataset_metadata),
         ),
         dataset_metadata,
-        cfg,
-        upper_bound=dataset_metadata.max_norm,
     )
+
     model = compile_model(model, cfg)
     model.summary()
+
     num_epochs = get_max_epochs(cfg.epsilon_max, model)
+
+    adaptive = AdaptiveQuantileClipping(
+        ds_train=ds_train,
+        patience=1,
+        noise_multiplier=cfg.noise_multiplier * 5,  # more noisy.
+        quantile=cfg.dynamic_clipping_quantiles,
+        learning_rate=1.0,
+    )
+    adaptive.set_model(model)
     callbacks = [
         WandbCallback(save_model=False, monitor="val_accuracy"),
-        EarlyStopping(monitor="val_accuracy", min_delta=0.001, patience=15),
-        ReduceLROnPlateau(
-            monitor="val_accuracy", factor=0.9, min_delta=0.0001, patience=5
-        ),
         DP_Accountant(),
+        adaptive,
     ]
+
     hist = model.fit(
         ds_train,
         epochs=num_epochs,
@@ -179,26 +228,10 @@ def train():
         batch_size=cfg.batch_size,
         callbacks=callbacks,
     )
-    wandb.log(
-        {
-            "Accuracies": wandb.plot.line_series(
-                xs=[
-                    np.linspace(0, num_epochs, num_epochs + 1),
-                    np.linspace(0, num_epochs, num_epochs + 1),
-                ],
-                ys=[hist.history["accuracy"], hist.history["val_accuracy"]],
-                keys=["Train Accuracy", "Test Accuracy"],
-                title="Train/Test Accuracy",
-                xname="num_epochs",
-            )
-        }
-    )
-    if cfg.save:
-        model.save(f"{cfg.save_folder}/{cfg.model_name}.h5")
 
 
 def main(_):
-    run_with_wandb(cfg=cfg, train_function=train, project="MNIST_ClipLess_SGD")
+    run_with_wandb(cfg=cfg, train_function=train, project="ICLR_MNIST_acc")
 
 
 if __name__ == "__main__":
