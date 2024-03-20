@@ -5,10 +5,10 @@
         <img src="https://img.shields.io/badge/Python-3.9 | 3.10 | 3.11-efefef">
     </a>
     <a href="https://github.com/deel-ai/lipdp/actions/workflows/tests.yml">
-        <img alt="Tests" src="https://github.com/deel-ai/lipdp/actions/workflows/tests.yml/badge.svg?branch=release-no-advertising">
+        <img alt="Tests" src="https://github.com/deel-ai/lipdp/actions/workflows/tests.yml/badge.svg?branch=main">
     </a>
     <a href="https://github.com/deel-ai/lipdp/actions/workflows/python-linters.yml">
-        <img alt="Linter" src="https://github.com/deel-ai/lipdp/actions/workflows/python-linters.yml/badge.svg?branch=release-no-advertising">
+        <img alt="Linter" src="https://github.com/deel-ai/lipdp/actions/workflows/python-linters.yml/badge.svg?branch=main">
     </a>
     <a href="#">
         <img src="https://img.shields.io/badge/License-MIT-efefef">
