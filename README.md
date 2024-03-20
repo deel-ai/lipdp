@@ -5,11 +5,11 @@
     <a href="#">
         <img src="https://img.shields.io/badge/Python-3.9 | 3.10 | 3.11-efefef">
     </a>
-    <a href="https://github.com/Algue-Rythme/lip-dp/actions/workflows/tests.yml">
-        <img alt="Tests" src="https://github.com/Algue-Rythme/lip-dp/actions/workflows/tests.yml/badge.svg?branch=release-no-advertising">
+    <a href="https://github.com/deel-ai/lipdp/actions/workflows/tests.yml">
+        <img alt="Tests" src="https://github.com/deel-ai/lipdp/actions/workflows/tests.yml/badge.svg?branch=release-no-advertising">
     </a>
-    <a href="https://github.com/Algue-Rythme/lip-dp/actions/workflows/python-linters.yml">
-        <img alt="Linter" src="https://github.com/Algue-Rythme/lip-dp/actions/workflows/python-linters.yml/badge.svg?branch=release-no-advertising">
+    <a href="https://github.com/deel-ai/lipdp/actions/workflows/python-linters.yml">
+        <img alt="Linter" src="https://github.com/deel-ai/lipdp/actions/workflows/python-linters.yml/badge.svg?branch=release-no-advertising">
     </a>
     <a href="#">
         <img src="https://img.shields.io/badge/License-MIT-efefef">

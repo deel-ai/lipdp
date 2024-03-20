@@ -4,11 +4,11 @@ on:
   push:
     branches:
       - main
-      - release-no-advertising
+      - develop
   pull_request:
     branches:
       - main
-      - release-no-advertising
+      - develop
 
 jobs:
   checks:
